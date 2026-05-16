@@ -54,7 +54,8 @@ export default function DashboardCoordenador() {
   const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
   const [extratos, setExtratos] = useState<SolicitacaoExtrato[]>([]);
   const [extratos6m, setExtratos6m] = useState<SolicitacaoExtrato[]>([]);
-  const [checklistMes, setChecklistMes] = useState<ProgressoChecklist[]>([]);
+  const [checklist6m, setChecklist6m] = useState<ProgressoChecklist[]>([]);
+  const [totalEtapas, setTotalEtapas] = useState(0);
   const [busca, setBusca] = useState('');
   const [filtroAnalista, setFiltroAnalista] = useState<string>('todos');
   const [filtroEnvio, setFiltroEnvio] = useState<FiltroEnvio>('todas');
@@ -142,11 +143,17 @@ export default function DashboardCoordenador() {
         setExtratos(todos.filter((e) => e.competencia === COMPETENCIA_ATUAL));
       }
 
+      const competencias6mLista = competenciasAnteriores(6);
       const { data: checklistData } = await supabase
         .from('progresso_checklist')
         .select('*')
-        .eq('competencia', COMPETENCIA_ATUAL);
-      setChecklistMes(checklistData || []);
+        .in('competencia', competencias6mLista);
+      setChecklist6m(checklistData || []);
+
+      const { count: countEtapas } = await supabase
+        .from('etapas_checklist')
+        .select('*', { count: 'exact', head: true });
+      setTotalEtapas(countEtapas || 0);
 
       setLoading(false);
     };
@@ -196,25 +203,45 @@ export default function DashboardCoordenador() {
     return 'parcial';
   };
 
+  // Percentual do checklist de uma empresa em uma competência
+  const percentualBalanco = (empresaId: string, competencia: string): number => {
+    if (totalEtapas === 0) return 0;
+    const feitos = checklist6m.filter(
+      (c) => c.empresa_id === empresaId && c.competencia === competencia && c.feito_em
+    ).length;
+    return Math.round((feitos / totalEtapas) * 100);
+  };
+
+  // Status do balanço (checklist) de uma empresa
+  type StatusBalanco = 'sem_dados' | 'nao_iniciado' | 'em_andamento' | 'concluido';
+  const statusBalancoDaEmpresa = (empresaId: string, competencia: string = COMPETENCIA_ATUAL): StatusBalanco => {
+    if (totalEtapas === 0) return 'sem_dados';
+    const pct = percentualBalanco(empresaId, competencia);
+    if (pct === 0) return 'nao_iniciado';
+    if (pct === 100) return 'concluido';
+    return 'em_andamento';
+  };
+
   const statsPorAnalista = useMemo(() => {
     return analistas.map((a) => {
       const empresasDoAnalista = empresasAtivas.filter((e) => e.analista_id === a.id);
       const total = empresasDoAnalista.length;
       const naoEnvia = empresasDoAnalista.filter((e) => e.nao_envia_extratos).length;
-      const elegives = empresasDoAnalista.filter((e) => !e.nao_envia_extratos);
-      let concluidas = 0, parciais = 0, pendentes = 0, semBancos = 0;
-      for (const emp of elegives) {
-        const s = statusMesDaEmpresa(emp.id);
+      let concluidas = 0, emAndamento = 0, naoIniciadas = 0;
+      for (const emp of empresasDoAnalista) {
+        const s = statusBalancoDaEmpresa(emp.id, COMPETENCIA_ATUAL);
         if (s === 'concluido') concluidas++;
-        else if (s === 'parcial') parciais++;
-        else if (s === 'pendente') pendentes++;
-        else semBancos++;
+        else if (s === 'em_andamento') emAndamento++;
+        else naoIniciadas++;
       }
-      const baseElegivel = elegives.length - semBancos;
-      const percentConcluido = baseElegivel > 0 ? Math.round((concluidas / baseElegivel) * 100) : 0;
-      return { analista: a, total, naoEnvia, concluidas, parciais, pendentes, semBancos, percentConcluido };
+      const percentConcluido = total > 0 ? Math.round((concluidas / total) * 100) : 0;
+      return {
+        analista: a, total, naoEnvia,
+        concluidas, parciais: emAndamento, pendentes: naoIniciadas, semBancos: 0,
+        percentConcluido,
+      };
     });
-  }, [analistas, empresasAtivas, bancosPorEmpresa, extratoPorBanco]);
+  }, [analistas, empresasAtivas, checklist6m, totalEtapas]);
 
   const empresasAtencao = useMemo(() => {
     return empresasAtivas
@@ -285,60 +312,26 @@ export default function DashboardCoordenador() {
   // ====== Métricas para aba Desempenho ======
   const competencias6m = useMemo(() => competenciasAnteriores(6), []);
 
-  // % extratos recebidos por (analista, competencia) — empresas ativas e regulares apenas
-  const historicoExtratos = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {}; // {analistaId: {competencia: percent}}
+  // % balanços concluídos por (analista, competencia)
+  const historicoBalancos = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
     analistas.forEach((a) => { map[a.id] = {}; });
-    for (const a of analistas) {
-      const elegives = empresasAtivas.filter((e) => e.analista_id === a.id && !e.nao_envia_extratos);
-      for (const comp of competencias6m) {
-        let totalCom = 0;
-        let recebidasTodas = 0;
-        for (const emp of elegives) {
-          const bs = bancosPorEmpresa[emp.id] || [];
-          if (bs.length === 0) continue;
-          totalCom++;
-          let recebidos = 0;
-          for (const b of bs) {
-            const e = extratos6m.find((x) => x.banco_id === b.id && x.competencia === comp);
-            if (e && (e.status === 'recebido' || e.status === 'importado')) recebidos++;
-          }
-          if (recebidos === bs.length) recebidasTodas++;
-        }
-        map[a.id][comp] = totalCom > 0 ? Math.round((recebidasTodas / totalCom) * 100) : 0;
-      }
-    }
-    return map;
-  }, [analistas, empresasAtivas, bancosPorEmpresa, extratos6m, competencias6m]);
-
-  // % balanços concluídos no mês (todas as etapas marcadas)
-  const balancosPorAnalista = useMemo(() => {
-    // checklistMes: array de progresso_checklist, sem etapas_checklist
-    // total de etapas é fixo (10) - mas vou contar das entries
-    const totalEtapasAprox = Math.max(...empresas.map(emp => {
-      return checklistMes.filter((c) => c.empresa_id === emp.id).length;
-    }).filter(n => n > 0), 10);
-
-    const map: Record<string, { concluidos: number; total: number; percentual: number }> = {};
+    if (totalEtapas === 0) return map;
     for (const a of analistas) {
       const empresasA = empresasAtivas.filter((e) => e.analista_id === a.id);
-      let concluidos = 0;
-      let comProgresso = 0;
-      for (const emp of empresasA) {
-        const entries = checklistMes.filter((c) => c.empresa_id === emp.id);
-        if (entries.length === 0) continue;
-        comProgresso++;
-        const feitos = entries.filter((c) => c.feito_em).length;
-        if (feitos >= entries.length && entries.length >= totalEtapasAprox / 2) concluidos++;
+      for (const comp of competencias6m) {
+        let concluidos = 0;
+        for (const emp of empresasA) {
+          const feitos = checklist6m.filter(
+            (c) => c.empresa_id === emp.id && c.competencia === comp && c.feito_em
+          ).length;
+          if (feitos === totalEtapas) concluidos++;
+        }
+        map[a.id][comp] = empresasA.length > 0 ? Math.round((concluidos / empresasA.length) * 100) : 0;
       }
-      map[a.id] = {
-        concluidos,
-        total: empresasA.length,
-        percentual: empresasA.length > 0 ? Math.round((concluidos / empresasA.length) * 100) : 0,
-      };
     }
     return map;
-  }, [analistas, empresasAtivas, checklistMes, empresas]);
+  }, [analistas, empresasAtivas, checklist6m, competencias6m, totalEtapas]);
 
   // Total de solicitações registradas no mês por analista
   const solicitacoesPorAnalista = useMemo(() => {
@@ -585,7 +578,7 @@ export default function DashboardCoordenador() {
                     Desempenho por analista
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Extratos recebidos na competência atual (excluindo empresas marcadas como não envia).
+                    Progresso dos balanços (checklist) na competência atual.
                   </p>
                 </header>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -598,7 +591,7 @@ export default function DashboardCoordenador() {
                         </div>
                         <div className="text-right">
                           <p className="text-2xl font-semibold text-slate-900">{s.percentConcluido}%</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">recebidos</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">concluídos</p>
                         </div>
                       </div>
                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
@@ -614,26 +607,21 @@ export default function DashboardCoordenador() {
                       <div className="grid grid-cols-4 gap-2 text-center">
                         <div>
                           <p className="text-sm font-semibold text-emerald-700">{s.concluidas}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Ok</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Concl.</p>
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-amber-700">{s.parciais}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Parcial</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Em and.</p>
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-red-700">{s.pendentes}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Pendente</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Não inic.</p>
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-500">{s.naoEnvia}</p>
                           <p className="text-[10px] text-slate-500 uppercase tracking-wider">N/Env.</p>
                         </div>
                       </div>
-                      {s.semBancos > 0 && (
-                        <p className="mt-3 text-[11px] text-slate-400">
-                          {s.semBancos} sem bancos cadastrados.
-                        </p>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -858,26 +846,23 @@ export default function DashboardCoordenador() {
                       {(() => {
                         const linhas = [
                           {
-                            label: 'Extratos recebidos',
+                            label: 'Balanços concluídos',
                             valores: statsPorAnalista.map((s) => ({
                               valor: s.percentConcluido,
-                              texto: `${s.percentConcluido}%`,
+                              texto: `${s.percentConcluido}% (${s.concluidas}/${s.total})`,
                               max: 100,
                             })),
                           },
                           {
-                            label: 'Balanços 100% concluídos',
-                            valores: analistas.map((a) => {
-                              const b = balancosPorAnalista[a.id];
-                              return {
-                                valor: b?.percentual || 0,
-                                texto: `${b?.percentual || 0}% (${b?.concluidos || 0}/${b?.total || 0})`,
-                                max: 100,
-                              };
-                            }),
+                            label: 'Balanços em andamento',
+                            valores: statsPorAnalista.map((s) => ({
+                              valor: s.parciais,
+                              texto: String(s.parciais),
+                              max: 0,
+                            })),
                           },
                           {
-                            label: 'Solicitações registradas',
+                            label: 'Solicitações de extrato',
                             valores: analistas.map((a) => {
                               const v = solicitacoesPorAnalista[a.id] || 0;
                               return { valor: v, texto: `${v}×`, max: 0 };
@@ -943,7 +928,7 @@ export default function DashboardCoordenador() {
                     Evolução dos últimos 6 meses
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    % de empresas com extratos completamente recebidos, por analista.
+                    % de empresas com balanço 100% concluído, por analista.
                   </p>
                 </header>
 
@@ -990,7 +975,7 @@ export default function DashboardCoordenador() {
                           {analistas.map((a, ai) => {
                             const cor = CORES_ANALISTAS[ai % CORES_ANALISTAS.length];
                             const pontos = competencias6m.map((c, i) => {
-                              const p = historicoExtratos[a.id]?.[c] ?? 0;
+                              const p = historicoBalancos[a.id]?.[c] ?? 0;
                               const x = M.l + i * xStep;
                               const y = M.t + ch - (p / 100) * ch;
                               return { x, y, p, c };
@@ -1064,14 +1049,18 @@ export default function DashboardCoordenador() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 text-center">
-                          <div className="bg-slate-50 rounded px-2 py-2">
-                            <p className="text-lg font-semibold text-slate-900">{s.percentConcluido}%</p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Extratos</p>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="bg-slate-50 rounded px-1 py-2">
+                            <p className="text-lg font-semibold text-emerald-700">{s.concluidas}</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Concl.</p>
                           </div>
-                          <div className="bg-slate-50 rounded px-2 py-2">
-                            <p className="text-lg font-semibold text-slate-900">{balancosPorAnalista[s.analista.id]?.percentual || 0}%</p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Balanços</p>
+                          <div className="bg-slate-50 rounded px-1 py-2">
+                            <p className="text-lg font-semibold text-amber-700">{s.parciais}</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Em and.</p>
+                          </div>
+                          <div className="bg-slate-50 rounded px-1 py-2">
+                            <p className="text-lg font-semibold text-red-700">{atencaoPorAnalista[s.analista.id]?.length || 0}</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Atenção</p>
                           </div>
                         </div>
                       </button>
@@ -1086,13 +1075,12 @@ export default function DashboardCoordenador() {
             const a = analistas.find((x) => x.id === analistaDetalhado);
             if (!a) return null;
             const s = statsPorAnalista.find((x) => x.analista.id === analistaDetalhado);
-            const b = balancosPorAnalista[analistaDetalhado];
             const atencoes = atencaoPorAnalista[analistaDetalhado] || [];
             const empresasA = empresasAtivas.filter((e) => e.analista_id === analistaDetalhado);
             const cor = CORES_ANALISTAS[analistas.findIndex((x) => x.id === analistaDetalhado) % CORES_ANALISTAS.length];
             const historico = competencias6m.map((c) => ({
               competencia: c,
-              percentual: historicoExtratos[analistaDetalhado]?.[c] ?? 0,
+              percentual: historicoBalancos[analistaDetalhado]?.[c] ?? 0,
             }));
 
             return (
@@ -1129,12 +1117,17 @@ export default function DashboardCoordenador() {
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{empresasA.length}</p>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-md p-4">
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Extratos do mês</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{s?.percentConcluido || 0}%</p>
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Balanços concluídos</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                      {s?.percentConcluido || 0}%
+                      <span className="text-sm font-normal text-slate-500 ml-2">
+                        ({s?.concluidas || 0}/{s?.total || 0})
+                      </span>
+                    </p>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-md p-4">
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Balanços</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{b?.percentual || 0}%</p>
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Em andamento</p>
+                    <p className="mt-2 text-2xl font-semibold text-amber-700">{s?.parciais || 0}</p>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-md p-4">
                     <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Em atenção</p>
