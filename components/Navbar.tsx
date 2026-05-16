@@ -13,18 +13,28 @@ export default function Navbar({ usuario }: { usuario: any }) {
   };
 
   return (
-    <nav className="bg-blue-600 text-white p-4 flex justify-between items-center">
-      <Link href="/" className="text-xl font-bold">
-        📊 Contabilidade
-      </Link>
-      <div className="flex gap-4 items-center">
-        <span className="text-sm">Olá, {usuario?.email}</span>
-        <button
-          onClick={handleLogout}
-          className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded text-sm"
-        >
-          Sair
-        </button>
+    <nav className="bg-slate-900 border-b border-slate-800">
+      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-3">
+          <span className="inline-flex items-center justify-center h-8 w-8 rounded bg-white">
+            <span className="text-slate-900 font-bold text-xs tracking-tight">RA</span>
+          </span>
+          <span className="text-white text-sm font-semibold tracking-tight">
+            R.A. Contabilidade
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-4">
+          <span className="text-slate-300 text-xs hidden sm:inline">
+            {usuario?.email}
+          </span>
+          <button
+            onClick={handleLogout}
+            className="text-slate-200 hover:text-white text-xs font-medium border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition"
+          >
+            Sair
+          </button>
+        </div>
       </div>
     </nav>
   );

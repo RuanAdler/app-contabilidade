@@ -31,5 +31,9 @@ export default function Home() {
     checkAuth();
   }, [router]);
 
-  return <div className="flex items-center justify-center h-screen">Redirecionando...</div>;
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <p className="text-sm text-slate-500">Redirecionando...</p>
+    </div>
+  );
 }

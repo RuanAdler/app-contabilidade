@@ -16,13 +16,13 @@ export default function Login() {
     setLoading(true);
     setError('');
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (signInError) {
-      setError(signInError.message);
+      setError('Credenciais inválidas. Verifique seu e-mail e senha.');
       setLoading(false);
       return;
     }
@@ -41,50 +41,76 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white p-8 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-6 text-center text-blue-600">
-          📊 Contabilidade
-        </h1>
-        <h2 className="text-lg font-semibold mb-6 text-center">Login</h2>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
-            {error}
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center h-12 w-12 rounded bg-slate-900 mb-4">
+            <span className="text-white font-bold text-lg tracking-tight">RA</span>
           </div>
-        )}
+          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
+            R.A. Contabilidade
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Sistema interno de gestão de carteira
+          </p>
+        </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">E-mail</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-              required
-            />
-          </div>
+        <div className="bg-white border border-slate-200 rounded-md shadow-sm p-8">
+          <h2 className="text-base font-semibold text-slate-900 mb-1">
+            Acesso restrito
+          </h2>
+          <p className="text-sm text-slate-500 mb-6">
+            Informe suas credenciais para continuar.
+          </p>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Senha</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
-              required
-            />
-          </div>
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+              {error}
+            </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg disabled:opacity-50"
-          >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-        </form>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                E-mail corporativo
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Senha
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium py-2.5 rounded-md disabled:opacity-50 transition mt-2"
+            >
+              {loading ? 'Autenticando...' : 'Entrar'}
+            </button>
+          </form>
+        </div>
+
+        <p className="text-center text-xs text-slate-400 mt-6">
+          Em caso de problemas de acesso, contate o coordenador.
+        </p>
       </div>
     </div>
   );
