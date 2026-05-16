@@ -13,13 +13,33 @@ export default function EmpresaDetail() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
   const [checklist, setChecklist] = useState<ProgressoChecklist[]>([]);
-  const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+  const hoje = new Date();
+  const [ano, setAno] = useState(String(hoje.getFullYear()));
+  const [mes, setMes] = useState(String(hoje.getMonth() + 1).padStart(2, '0'));
+  const competencia = `${ano}-${mes}`;
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>('extratos');
   const [sidebarAberta, setSidebarAberta] = useState(true);
   const router = useRouter();
   const params = useParams();
   const empresaId = params.id as string;
+
+  const meses = [
+    { num: '01', label: 'Jan' },
+    { num: '02', label: 'Fev' },
+    { num: '03', label: 'Mar' },
+    { num: '04', label: 'Abr' },
+    { num: '05', label: 'Mai' },
+    { num: '06', label: 'Jun' },
+    { num: '07', label: 'Jul' },
+    { num: '08', label: 'Ago' },
+    { num: '09', label: 'Set' },
+    { num: '10', label: 'Out' },
+    { num: '11', label: 'Nov' },
+    { num: '12', label: 'Dez' },
+  ];
+
+  const anos = Array.from({ length: 5 }, (_, i) => String(hoje.getFullYear() - 2 + i));
 
   useEffect(() => {
     const loadData = async () => {
@@ -194,28 +214,51 @@ export default function EmpresaDetail() {
             <p className="mt-1 text-sm text-slate-500">{empresa.email_contato || 'Sem e-mail cadastrado'}</p>
           </div>
 
-          <div className="mb-6 bg-white border border-slate-200 rounded-md p-4 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Competência
-              </label>
-              <input
-                type="month"
-                value={competencia}
-                onChange={(e) => setCompetencia(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
-              />
+          <div className="mb-6 bg-white border border-slate-200 rounded-md">
+            <div className="px-4 py-3 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Ano
+                </label>
+                <select
+                  value={ano}
+                  onChange={(e) => setAno(e.target.value)}
+                  className="px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  {anos.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Conclusão do balanço
+                </p>
+                <p className="text-xl font-semibold text-slate-900">
+                  {percentual}%
+                  <span className="text-xs font-normal text-slate-500 ml-2">
+                    ({concluidos}/{totalChecklist})
+                  </span>
+                </p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Conclusão do balanço
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-slate-900">
-                {percentual}%
-                <span className="text-sm font-normal text-slate-500 ml-2">
-                  ({concluidos}/{totalChecklist})
-                </span>
-              </p>
+            <div className="px-2 py-2 flex flex-wrap gap-1">
+              {meses.map((m) => {
+                const ativo = mes === m.num;
+                return (
+                  <button
+                    key={m.num}
+                    onClick={() => setMes(m.num)}
+                    className={`flex-1 min-w-[58px] px-3 py-2 text-xs font-medium rounded transition ${
+                      ativo
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
