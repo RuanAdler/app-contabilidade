@@ -161,6 +161,75 @@ export default function EmpresaDetail() {
     }
   };
 
+  const handleRegistrarSolicitacao = async (bancoId: string) => {
+    const existente = extratosAno.find(
+      (e) => e.banco_id === bancoId && e.competencia === competencia
+    );
+    const agora = new Date().toISOString();
+    let registro: SolicitacaoExtrato | null = null;
+    if (existente) {
+      const novaQtd = (existente.qtd_solicitacoes || 0) + 1;
+      const novoStatus: StatusExtrato =
+        existente.status === 'recebido' || existente.status === 'importado'
+          ? existente.status
+          : 'solicitado';
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .update({
+          qtd_solicitacoes: novaQtd,
+          ultima_solicitacao_em: agora,
+          status: novoStatus,
+          updated_at: agora,
+        })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      registro = data;
+      if (data) {
+        setExtratosAno((prev) =>
+          prev.map((e) => (e.id === existente.id ? data : e))
+        );
+      }
+    } else {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .insert({
+          banco_id: bancoId,
+          competencia,
+          status: 'solicitado',
+          qtd_solicitacoes: 1,
+          ultima_solicitacao_em: agora,
+        })
+        .select()
+        .single();
+      registro = data;
+      if (data) setExtratosAno((prev) => [...prev, data]);
+    }
+
+    // Regra automática: 3+ solicitações + 2 dias parado em pendente/solicitado
+    if (
+      registro &&
+      empresa &&
+      !empresa.nao_envia_extratos &&
+      registro.qtd_solicitacoes >= 3 &&
+      (registro.status === 'pendente' || registro.status === 'solicitado')
+    ) {
+      const primeiraSolicitacao = new Date(registro.created_at).getTime();
+      const diasDecorridos = (Date.now() - primeiraSolicitacao) / (1000 * 60 * 60 * 24);
+      if (diasDecorridos >= 2) {
+        await marcarComoNaoEnvia(true);
+      }
+    }
+  };
+
+  const marcarComoNaoEnvia = async (marcar: boolean) => {
+    const update = marcar
+      ? { nao_envia_extratos: true, marcado_em: new Date().toISOString() }
+      : { nao_envia_extratos: false, marcado_em: null };
+    await supabase.from('empresas').update(update).eq('id', empresaId);
+    setEmpresa((prev) => (prev ? { ...prev, ...update } : prev));
+  };
+
   const handleAddBanco = async (e: React.FormEvent) => {
     e.preventDefault();
     const nome = novoBanco.trim();
@@ -340,11 +409,34 @@ export default function EmpresaDetail() {
           </button>
 
           <div className="mb-8 border-b border-slate-200 pb-6">
-            <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-              Empresa
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-900">{empresa.nome}</h1>
-            <p className="mt-1 text-sm text-slate-500">{empresa.email_contato || 'Sem e-mail cadastrado'}</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  Empresa
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-900">{empresa.nome}</h1>
+                <p className="mt-1 text-sm text-slate-500">{empresa.email_contato || 'Sem e-mail cadastrado'}</p>
+              </div>
+              <button
+                onClick={() => marcarComoNaoEnvia(!empresa.nao_envia_extratos)}
+                className={`text-xs font-medium px-3 py-1.5 rounded border transition ${
+                  empresa.nao_envia_extratos
+                    ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-amber-50 hover:border-amber-300'
+                }`}
+              >
+                {empresa.nao_envia_extratos ? 'Remover marcação' : 'Marcar como não envia extratos'}
+              </button>
+            </div>
+            {empresa.nao_envia_extratos && (
+              <div className="mt-4 border border-amber-300 bg-amber-50 text-amber-900 rounded-md px-4 py-3 text-sm">
+                <p className="font-semibold">Empresa não envia extratos regularmente</p>
+                <p className="text-xs mt-0.5">
+                  Marcada em {empresa.marcado_em ? new Date(empresa.marcado_em).toLocaleDateString('pt-BR') : '—'}.
+                  Continue cobrando, mas considere ações alternativas.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="mb-6 bg-white border border-slate-200 rounded-md">
@@ -490,7 +582,10 @@ export default function EmpresaDetail() {
                           Banco
                         </th>
                         <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                          Status atual
+                          Status
+                        </th>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
+                          Solicitações
                         </th>
                         <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
                           Alterar
@@ -501,6 +596,12 @@ export default function EmpresaDetail() {
                     <tbody>
                       {bancos.map((banco, idx) => {
                         const status = statusDoBanco(banco.id);
+                        const registro = extratosAno.find(
+                          (e) => e.banco_id === banco.id && e.competencia === competencia
+                        );
+                        const qtd = registro?.qtd_solicitacoes || 0;
+                        const ultima = registro?.ultima_solicitacao_em;
+                        const recebido = status === 'recebido' || status === 'importado';
                         return (
                           <tr
                             key={banco.id}
@@ -508,17 +609,38 @@ export default function EmpresaDetail() {
                               idx === bancos.length - 1 ? 'border-b-0' : ''
                             }`}
                           >
-                            <td className="px-5 py-3 text-slate-900 font-medium">
+                            <td className="px-5 py-3 text-slate-900 font-medium align-top">
                               {banco.nome_banco}
                             </td>
-                            <td className="px-5 py-3">
+                            <td className="px-5 py-3 align-top">
                               <span
                                 className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${STATUS_BADGE_CLASS[status]}`}
                               >
                                 {STATUS_LABELS[status]}
                               </span>
                             </td>
-                            <td className="px-5 py-3">
+                            <td className="px-5 py-3 align-top">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-xs font-medium ${qtd >= 3 ? 'text-amber-700' : 'text-slate-600'}`}>
+                                  {qtd === 0 ? 'Nenhuma' : `${qtd}×`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRegistrarSolicitacao(banco.id)}
+                                  disabled={recebido}
+                                  title={recebido ? 'Extrato já recebido' : 'Registrar nova solicitação'}
+                                  className="text-xs font-medium px-2 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-700 disabled:hover:border-slate-300 transition"
+                                >
+                                  + Registrar
+                                </button>
+                              </div>
+                              {ultima && (
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  Última: {new Date(ultima).toLocaleDateString('pt-BR')}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 align-top">
                               <select
                                 value={status}
                                 onChange={(e) => handleStatusChange(banco.id, e.target.value as StatusExtrato)}
@@ -530,7 +652,7 @@ export default function EmpresaDetail() {
                                 <option value="importado">Importado</option>
                               </select>
                             </td>
-                            <td className="px-5 py-3 text-right">
+                            <td className="px-5 py-3 text-right align-top">
                               <button
                                 onClick={() => handleRemoveBanco(banco.id, banco.nome_banco)}
                                 title="Excluir banco"

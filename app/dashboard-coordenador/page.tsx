@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import { Empresa, Analista } from '@/lib/types';
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
+type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 
 export default function DashboardCoordenador() {
   const [usuario, setUsuario] = useState<any>(null);
@@ -15,6 +16,7 @@ export default function DashboardCoordenador() {
   const [empresas, setEmpresas] = useState<EmpresaComAnalista[]>([]);
   const [busca, setBusca] = useState('');
   const [filtroAnalista, setFiltroAnalista] = useState<string>('todos');
+  const [filtroEnvio, setFiltroEnvio] = useState<FiltroEnvio>('todas');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -81,9 +83,15 @@ export default function DashboardCoordenador() {
         e.nome.toLowerCase().includes(termo) ||
         (e.email_contato || '').toLowerCase().includes(termo) ||
         e.analista_nome.toLowerCase().includes(termo);
-      return passaAnalista && passaBusca;
+      const passaEnvio =
+        filtroEnvio === 'todas' ||
+        (filtroEnvio === 'regulares' && !e.nao_envia_extratos) ||
+        (filtroEnvio === 'nao_envia' && e.nao_envia_extratos);
+      return passaAnalista && passaBusca && passaEnvio;
     });
-  }, [empresas, busca, filtroAnalista]);
+  }, [empresas, busca, filtroAnalista, filtroEnvio]);
+
+  const totalNaoEnvia = empresas.filter((e) => e.nao_envia_extratos).length;
 
   if (loading) {
     return (
@@ -110,7 +118,7 @@ export default function DashboardCoordenador() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white border border-slate-200 rounded-md p-4">
             <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
               Total de empresas
@@ -133,10 +141,16 @@ export default function DashboardCoordenador() {
                 : 0}
             </p>
           </div>
+          <div className="bg-white border border-slate-200 rounded-md p-4">
+            <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+              Não envia extratos
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-amber-700">{totalNaoEnvia}</p>
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-md shadow-sm">
-          <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
+          <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_200px_220px] gap-3">
             <div className="relative">
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
@@ -171,6 +185,15 @@ export default function DashboardCoordenador() {
                 </option>
               ))}
             </select>
+            <select
+              value={filtroEnvio}
+              onChange={(e) => setFiltroEnvio(e.target.value as FiltroEnvio)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+            >
+              <option value="todas">Todas as empresas</option>
+              <option value="regulares">Apenas regulares</option>
+              <option value="nao_envia">Apenas "não envia"</option>
+            </select>
           </div>
 
           {empresasFiltradas.length === 0 ? (
@@ -189,7 +212,7 @@ export default function DashboardCoordenador() {
                       Analista responsável
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                      E-mail de contato
+                      Situação
                     </th>
                     <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
                       Ação
@@ -210,8 +233,17 @@ export default function DashboardCoordenador() {
                       <td className="px-4 py-3 text-slate-600">
                         {empresa.analista_nome}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {empresa.email_contato || '—'}
+                      <td className="px-4 py-3">
+                        {empresa.nao_envia_extratos ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21V3m0 0l13 4-13 5" />
+                            </svg>
+                            Não envia extratos
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link

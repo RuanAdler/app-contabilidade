@@ -7,10 +7,13 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { Empresa } from '@/lib/types';
 
+type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
+
 export default function DashboardAnalista() {
   const [usuario, setUsuario] = useState<any>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [busca, setBusca] = useState('');
+  const [filtroEnvio, setFiltroEnvio] = useState<FiltroEnvio>('todas');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -49,13 +52,20 @@ export default function DashboardAnalista() {
 
   const empresasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return empresas;
-    return empresas.filter(
-      (e) =>
+    return empresas.filter((e) => {
+      const passaBusca =
+        !termo ||
         e.nome.toLowerCase().includes(termo) ||
-        (e.email_contato || '').toLowerCase().includes(termo)
-    );
-  }, [empresas, busca]);
+        (e.email_contato || '').toLowerCase().includes(termo);
+      const passaEnvio =
+        filtroEnvio === 'todas' ||
+        (filtroEnvio === 'regulares' && !e.nao_envia_extratos) ||
+        (filtroEnvio === 'nao_envia' && e.nao_envia_extratos);
+      return passaBusca && passaEnvio;
+    });
+  }, [empresas, busca, filtroEnvio]);
+
+  const totalNaoEnvia = empresas.filter((e) => e.nao_envia_extratos).length;
 
   if (loading) {
     return (
@@ -78,12 +88,13 @@ export default function DashboardAnalista() {
             Empresas sob sua responsabilidade
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Total de {empresas.length} {empresas.length === 1 ? 'empresa cadastrada' : 'empresas cadastradas'}.
+            Total de {empresas.length} {empresas.length === 1 ? 'empresa cadastrada' : 'empresas cadastradas'}
+            {totalNaoEnvia > 0 && ` · ${totalNaoEnvia} marcada${totalNaoEnvia === 1 ? '' : 's'} como "não envia extratos"`}.
           </p>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-md shadow-sm">
-          <div className="p-4 border-b border-slate-200">
+          <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
             <div className="relative">
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
@@ -106,20 +117,20 @@ export default function DashboardAnalista() {
                 className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
               />
             </div>
-            {busca && (
-              <p className="mt-2 text-xs text-slate-500">
-                {empresasFiltradas.length} {empresasFiltradas.length === 1 ? 'resultado' : 'resultados'} para "{busca}"
-              </p>
-            )}
+            <select
+              value={filtroEnvio}
+              onChange={(e) => setFiltroEnvio(e.target.value as FiltroEnvio)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+            >
+              <option value="todas">Todas as empresas</option>
+              <option value="regulares">Apenas regulares</option>
+              <option value="nao_envia">Apenas "não envia extratos"</option>
+            </select>
           </div>
 
           {empresasFiltradas.length === 0 ? (
             <div className="p-10 text-center">
-              <p className="text-sm text-slate-500">
-                {empresas.length === 0
-                  ? 'Nenhuma empresa atribuída à sua conta.'
-                  : 'Nenhuma empresa corresponde à pesquisa.'}
-              </p>
+              <p className="text-sm text-slate-500">Nenhuma empresa encontrada.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -130,7 +141,7 @@ export default function DashboardAnalista() {
                       Empresa
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                      E-mail de contato
+                      Situação
                     </th>
                     <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
                       Ação
@@ -148,8 +159,17 @@ export default function DashboardAnalista() {
                       <td className="px-4 py-3 text-slate-900 font-medium">
                         {empresa.nome}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {empresa.email_contato || '—'}
+                      <td className="px-4 py-3">
+                        {empresa.nao_envia_extratos ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21V3m0 0l13 4-13 5" />
+                            </svg>
+                            Não envia extratos
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link

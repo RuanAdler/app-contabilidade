@@ -12,6 +12,8 @@ export interface Empresa {
   analista_id: string;
   email_contato: string;
   created_at: string;
+  nao_envia_extratos: boolean;
+  marcado_em: string | null;
 }
 
 export interface BancoEmpresa {
@@ -26,6 +28,8 @@ export interface SolicitacaoExtrato {
   banco_id: string;
   competencia: string;
   status: 'pendente' | 'solicitado' | 'recebido' | 'importado';
+  qtd_solicitacoes: number;
+  ultima_solicitacao_em: string | null;
   created_at: string;
   updated_at: string;
 }
