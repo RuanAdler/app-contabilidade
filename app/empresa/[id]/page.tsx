@@ -46,10 +46,10 @@ export default function EmpresaDetail() {
 
       const { data: checklistData } = await supabase
         .from('progresso_checklist')
-        .select('progresso_checklist.*, etapas_checklist(nome, ordem)')
+        .select('*, etapas_checklist(nome, ordem)')
         .eq('empresa_id', empresaId)
         .eq('competencia', competencia)
-        .order('ordem', { foreignTable: 'etapas_checklist' });
+        .order('etapa_id');
 
       setChecklist(checklistData || []);
 
