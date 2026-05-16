@@ -5,13 +5,31 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, StatusEmpresa } from '@/lib/types';
+import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa } from '@/lib/types';
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroStatus = 'todos' | StatusEmpresa;
 type StatusMes = 'sem_bancos' | 'concluido' | 'parcial' | 'pendente';
-type Aba = 'visao' | 'controle';
+type Aba = 'visao' | 'controle' | 'desempenho';
+
+const CORES_ANALISTAS = ['#0f766e', '#b45309', '#7c3aed', '#be123c', '#0369a1'];
+
+function competenciasAnteriores(qtd: number): string[] {
+  const lista: string[] = [];
+  const d = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  for (let i = qtd - 1; i >= 0; i--) {
+    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    lista.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return lista;
+}
+
+function labelCurtoMes(competencia: string): string {
+  const [ano, mes] = competencia.split('-');
+  const nomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  return `${nomes[parseInt(mes) - 1]}/${ano.slice(2)}`;
+}
 
 const hoje = new Date();
 const COMPETENCIA_ATUAL = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
@@ -35,6 +53,8 @@ export default function DashboardCoordenador() {
   const [empresas, setEmpresas] = useState<EmpresaComAnalista[]>([]);
   const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
   const [extratos, setExtratos] = useState<SolicitacaoExtrato[]>([]);
+  const [extratos6m, setExtratos6m] = useState<SolicitacaoExtrato[]>([]);
+  const [checklistMes, setChecklistMes] = useState<ProgressoChecklist[]>([]);
   const [busca, setBusca] = useState('');
   const [filtroAnalista, setFiltroAnalista] = useState<string>('todos');
   const [filtroEnvio, setFiltroEnvio] = useState<FiltroEnvio>('todas');
@@ -42,6 +62,7 @@ export default function DashboardCoordenador() {
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>('visao');
   const [sidebarAberta, setSidebarAberta] = useState(true);
+  const [analistaDetalhado, setAnalistaDetalhado] = useState<string | null>(null);
 
   // Modal de adicionar empresa
   const [modalAberto, setModalAberto] = useState(false);
@@ -107,14 +128,25 @@ export default function DashboardCoordenador() {
       const listaBancos = bancosData || [];
       setBancos(listaBancos);
 
+      const competencias6m = competenciasAnteriores(6);
+
       if (listaBancos.length > 0) {
+        const bancosIds = listaBancos.map((b) => b.id);
         const { data: extratosData } = await supabase
           .from('solicitacoes_extrato')
           .select('*')
-          .in('banco_id', listaBancos.map((b) => b.id))
-          .eq('competencia', COMPETENCIA_ATUAL);
-        setExtratos(extratosData || []);
+          .in('banco_id', bancosIds)
+          .in('competencia', competencias6m);
+        const todos = extratosData || [];
+        setExtratos6m(todos);
+        setExtratos(todos.filter((e) => e.competencia === COMPETENCIA_ATUAL));
       }
+
+      const { data: checklistData } = await supabase
+        .from('progresso_checklist')
+        .select('*')
+        .eq('competencia', COMPETENCIA_ATUAL);
+      setChecklistMes(checklistData || []);
 
       setLoading(false);
     };
@@ -250,6 +282,92 @@ export default function DashboardCoordenador() {
     });
   }, [empresas, busca, filtroAnalista, filtroStatus]);
 
+  // ====== Métricas para aba Desempenho ======
+  const competencias6m = useMemo(() => competenciasAnteriores(6), []);
+
+  // % extratos recebidos por (analista, competencia) — empresas ativas e regulares apenas
+  const historicoExtratos = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {}; // {analistaId: {competencia: percent}}
+    analistas.forEach((a) => { map[a.id] = {}; });
+    for (const a of analistas) {
+      const elegives = empresasAtivas.filter((e) => e.analista_id === a.id && !e.nao_envia_extratos);
+      for (const comp of competencias6m) {
+        let totalCom = 0;
+        let recebidasTodas = 0;
+        for (const emp of elegives) {
+          const bs = bancosPorEmpresa[emp.id] || [];
+          if (bs.length === 0) continue;
+          totalCom++;
+          let recebidos = 0;
+          for (const b of bs) {
+            const e = extratos6m.find((x) => x.banco_id === b.id && x.competencia === comp);
+            if (e && (e.status === 'recebido' || e.status === 'importado')) recebidos++;
+          }
+          if (recebidos === bs.length) recebidasTodas++;
+        }
+        map[a.id][comp] = totalCom > 0 ? Math.round((recebidasTodas / totalCom) * 100) : 0;
+      }
+    }
+    return map;
+  }, [analistas, empresasAtivas, bancosPorEmpresa, extratos6m, competencias6m]);
+
+  // % balanços concluídos no mês (todas as etapas marcadas)
+  const balancosPorAnalista = useMemo(() => {
+    // checklistMes: array de progresso_checklist, sem etapas_checklist
+    // total de etapas é fixo (10) - mas vou contar das entries
+    const totalEtapasAprox = Math.max(...empresas.map(emp => {
+      return checklistMes.filter((c) => c.empresa_id === emp.id).length;
+    }).filter(n => n > 0), 10);
+
+    const map: Record<string, { concluidos: number; total: number; percentual: number }> = {};
+    for (const a of analistas) {
+      const empresasA = empresasAtivas.filter((e) => e.analista_id === a.id);
+      let concluidos = 0;
+      let comProgresso = 0;
+      for (const emp of empresasA) {
+        const entries = checklistMes.filter((c) => c.empresa_id === emp.id);
+        if (entries.length === 0) continue;
+        comProgresso++;
+        const feitos = entries.filter((c) => c.feito_em).length;
+        if (feitos >= entries.length && entries.length >= totalEtapasAprox / 2) concluidos++;
+      }
+      map[a.id] = {
+        concluidos,
+        total: empresasA.length,
+        percentual: empresasA.length > 0 ? Math.round((concluidos / empresasA.length) * 100) : 0,
+      };
+    }
+    return map;
+  }, [analistas, empresasAtivas, checklistMes, empresas]);
+
+  // Total de solicitações registradas no mês por analista
+  const solicitacoesPorAnalista = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const a of analistas) {
+      const empresasA = empresasAtivas.filter((e) => e.analista_id === a.id);
+      let total = 0;
+      for (const emp of empresasA) {
+        const bs = bancosPorEmpresa[emp.id] || [];
+        for (const b of bs) {
+          const e = extratoPorBanco[b.id];
+          if (e) total += e.qtd_solicitacoes || 0;
+        }
+      }
+      map[a.id] = total;
+    }
+    return map;
+  }, [analistas, empresasAtivas, bancosPorEmpresa, extratoPorBanco]);
+
+  // Empresas em atenção por analista
+  const atencaoPorAnalista = useMemo(() => {
+    const map: Record<string, EmpresaComAnalista[]> = {};
+    for (const a of analistas) map[a.id] = [];
+    for (const item of empresasAtencao) {
+      map[item.empresa.analista_id]?.push(item.empresa);
+    }
+    return map;
+  }, [analistas, empresasAtencao]);
+
   // Decisões pendentes: empresas ativas marcadas como não envia, mas com status ativa
   const decisoesPendentes = useMemo(() => {
     return empresas.filter(
@@ -359,6 +477,15 @@ export default function DashboardCoordenador() {
         </svg>
       ),
     },
+    {
+      id: 'desempenho',
+      label: 'Desempenho da equipe',
+      icone: (
+        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
   ];
 
   return (
@@ -392,7 +519,7 @@ export default function DashboardCoordenador() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => { setAba(item.id); setBusca(''); setFiltroAnalista('todos'); }}
+                  onClick={() => { setAba(item.id); setBusca(''); setFiltroAnalista('todos'); setAnalistaDetalhado(null); }}
                   title={!sidebarAberta ? item.label : undefined}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition border-l-2 ${
                     ativo
@@ -678,6 +805,412 @@ export default function DashboardCoordenador() {
               </section>
             </>
           )}
+
+          {aba === 'desempenho' && !analistaDetalhado && (
+            <>
+              <div className="mb-8 border-b border-slate-200 pb-6">
+                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  Equipe
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                  Desempenho da equipe
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Compare resultados dos analistas e acompanhe evolução nos últimos 6 meses.
+                </p>
+              </div>
+
+              {/* Comparativo do mês — barras lado a lado */}
+              <section className="mb-8">
+                <header className="mb-3">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    Comparativo · <span className="capitalize">{NOME_MES}</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Métricas-chave da competência atual lado a lado.
+                  </p>
+                </header>
+
+                <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
+                          Métrica
+                        </th>
+                        {analistas.map((a, i) => (
+                          <th
+                            key={a.id}
+                            className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                className="inline-block h-2 w-2 rounded-full"
+                                style={{ background: CORES_ANALISTAS[i % CORES_ANALISTAS.length] }}
+                              />
+                              {a.nome}
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const linhas = [
+                          {
+                            label: 'Extratos recebidos',
+                            valores: statsPorAnalista.map((s) => ({
+                              valor: s.percentConcluido,
+                              texto: `${s.percentConcluido}%`,
+                              max: 100,
+                            })),
+                          },
+                          {
+                            label: 'Balanços 100% concluídos',
+                            valores: analistas.map((a) => {
+                              const b = balancosPorAnalista[a.id];
+                              return {
+                                valor: b?.percentual || 0,
+                                texto: `${b?.percentual || 0}% (${b?.concluidos || 0}/${b?.total || 0})`,
+                                max: 100,
+                              };
+                            }),
+                          },
+                          {
+                            label: 'Solicitações registradas',
+                            valores: analistas.map((a) => {
+                              const v = solicitacoesPorAnalista[a.id] || 0;
+                              return { valor: v, texto: `${v}×`, max: 0 };
+                            }),
+                          },
+                          {
+                            label: 'Empresas em atenção',
+                            valores: analistas.map((a) => {
+                              const v = atencaoPorAnalista[a.id]?.length || 0;
+                              return { valor: v, texto: String(v), max: 0 };
+                            }),
+                          },
+                        ];
+
+                        // Para métricas sem max fixo, usar o maior valor entre os analistas como referência
+                        linhas.forEach((l) => {
+                          if (l.valores[0]?.max === 0) {
+                            const maior = Math.max(...l.valores.map((v) => v.valor), 1);
+                            l.valores.forEach((v) => { v.max = maior; });
+                          }
+                        });
+
+                        return linhas.map((linha, lidx) => (
+                          <tr
+                            key={lidx}
+                            className={`border-b border-slate-100 ${
+                              lidx === linhas.length - 1 ? 'border-b-0' : ''
+                            }`}
+                          >
+                            <td className="px-5 py-4 font-medium text-slate-700 text-xs uppercase tracking-wider w-56">
+                              {linha.label}
+                            </td>
+                            {linha.valores.map((v, vi) => (
+                              <td key={vi} className="px-5 py-4">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-semibold text-slate-900 w-20">
+                                    {v.texto}
+                                  </span>
+                                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full transition-all"
+                                      style={{
+                                        width: `${Math.min(100, (v.valor / v.max) * 100)}%`,
+                                        background: CORES_ANALISTAS[vi % CORES_ANALISTAS.length],
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {/* Histórico 6 meses - gráfico de linha SVG */}
+              <section className="mb-8">
+                <header className="mb-3">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    Evolução dos últimos 6 meses
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    % de empresas com extratos completamente recebidos, por analista.
+                  </p>
+                </header>
+
+                <div className="bg-white border border-slate-200 rounded-md shadow-sm p-5">
+                  {(() => {
+                    const W = 720, H = 240, M = { t: 16, r: 16, b: 30, l: 36 };
+                    const cw = W - M.l - M.r;
+                    const ch = H - M.t - M.b;
+                    const xStep = competencias6m.length > 1 ? cw / (competencias6m.length - 1) : 0;
+
+                    return (
+                      <div className="overflow-x-auto">
+                        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[600px]" preserveAspectRatio="xMidYMid meet">
+                          {/* Grid horizontal */}
+                          {[0, 25, 50, 75, 100].map((p) => {
+                            const y = M.t + ch - (p / 100) * ch;
+                            return (
+                              <g key={p}>
+                                <line
+                                  x1={M.l} y1={y} x2={W - M.r} y2={y}
+                                  stroke="#e2e8f0" strokeDasharray={p === 0 ? '0' : '2 3'}
+                                />
+                                <text x={M.l - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#64748b">
+                                  {p}%
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Eixo X: meses */}
+                          {competencias6m.map((c, i) => {
+                            const x = M.l + i * xStep;
+                            return (
+                              <text
+                                key={c} x={x} y={H - 8}
+                                textAnchor="middle" fontSize="10" fill="#64748b"
+                              >
+                                {labelCurtoMes(c)}
+                              </text>
+                            );
+                          })}
+
+                          {/* Linhas e pontos por analista */}
+                          {analistas.map((a, ai) => {
+                            const cor = CORES_ANALISTAS[ai % CORES_ANALISTAS.length];
+                            const pontos = competencias6m.map((c, i) => {
+                              const p = historicoExtratos[a.id]?.[c] ?? 0;
+                              const x = M.l + i * xStep;
+                              const y = M.t + ch - (p / 100) * ch;
+                              return { x, y, p, c };
+                            });
+                            const pathD = pontos
+                              .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+                              .join(' ');
+                            return (
+                              <g key={a.id}>
+                                <path d={pathD} fill="none" stroke={cor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                {pontos.map((p, i) => (
+                                  <g key={i}>
+                                    <circle cx={p.x} cy={p.y} r="3.5" fill="white" stroke={cor} strokeWidth="2">
+                                      <title>{a.nome} · {labelCurtoMes(p.c)}: {p.p}%</title>
+                                    </circle>
+                                  </g>
+                                ))}
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="mt-4 flex items-center gap-4 flex-wrap text-xs">
+                    {analistas.map((a, i) => (
+                      <span key={a.id} className="flex items-center gap-1.5 text-slate-600">
+                        <span
+                          className="inline-block h-3 w-6 rounded-full"
+                          style={{ background: CORES_ANALISTAS[i % CORES_ANALISTAS.length] }}
+                        />
+                        {a.nome}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* Cards clicáveis por analista */}
+              <section>
+                <header className="mb-3">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    Ver detalhes
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Clique em um analista para abrir a visão detalhada.
+                  </p>
+                </header>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {statsPorAnalista.map((s, i) => {
+                    const cor = CORES_ANALISTAS[i % CORES_ANALISTAS.length];
+                    return (
+                      <button
+                        key={s.analista.id}
+                        onClick={() => setAnalistaDetalhado(s.analista.id)}
+                        className="bg-white border border-slate-200 hover:border-slate-400 rounded-md p-5 shadow-sm hover:shadow text-left transition group"
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <span
+                            className="inline-flex items-center justify-center h-10 w-10 rounded-full text-white font-semibold text-sm"
+                            style={{ background: cor }}
+                          >
+                            {s.analista.nome.slice(0, 2)}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900">{s.analista.nome}</p>
+                            <p className="text-xs text-slate-500">{s.total} empresas</p>
+                          </div>
+                          <svg className="h-4 w-4 text-slate-400 group-hover:text-slate-900 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-center">
+                          <div className="bg-slate-50 rounded px-2 py-2">
+                            <p className="text-lg font-semibold text-slate-900">{s.percentConcluido}%</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Extratos</p>
+                          </div>
+                          <div className="bg-slate-50 rounded px-2 py-2">
+                            <p className="text-lg font-semibold text-slate-900">{balancosPorAnalista[s.analista.id]?.percentual || 0}%</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Balanços</p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </>
+          )}
+
+          {aba === 'desempenho' && analistaDetalhado && (() => {
+            const a = analistas.find((x) => x.id === analistaDetalhado);
+            if (!a) return null;
+            const s = statsPorAnalista.find((x) => x.analista.id === analistaDetalhado);
+            const b = balancosPorAnalista[analistaDetalhado];
+            const atencoes = atencaoPorAnalista[analistaDetalhado] || [];
+            const empresasA = empresasAtivas.filter((e) => e.analista_id === analistaDetalhado);
+            const cor = CORES_ANALISTAS[analistas.findIndex((x) => x.id === analistaDetalhado) % CORES_ANALISTAS.length];
+            const historico = competencias6m.map((c) => ({
+              competencia: c,
+              percentual: historicoExtratos[analistaDetalhado]?.[c] ?? 0,
+            }));
+
+            return (
+              <>
+                <button
+                  onClick={() => setAnalistaDetalhado(null)}
+                  className="mb-6 text-xs font-medium text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Voltar para a equipe
+                </button>
+
+                <div className="mb-8 border-b border-slate-200 pb-6 flex items-center gap-4">
+                  <span
+                    className="inline-flex items-center justify-center h-14 w-14 rounded-full text-white font-semibold text-base"
+                    style={{ background: cor }}
+                  >
+                    {a.nome.slice(0, 2)}
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                      Analista
+                    </p>
+                    <h1 className="text-2xl font-semibold text-slate-900">{a.nome}</h1>
+                    <p className="text-sm text-slate-500">{a.email}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Carteira</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{empresasA.length}</p>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Extratos do mês</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{s?.percentConcluido || 0}%</p>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Balanços</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{b?.percentual || 0}%</p>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Em atenção</p>
+                    <p className="mt-2 text-2xl font-semibold text-amber-700">{atencoes.length}</p>
+                  </div>
+                </div>
+
+                <section className="mb-8">
+                  <header className="mb-3">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Evolução pessoal · últimos 6 meses
+                    </h2>
+                  </header>
+                  <div className="bg-white border border-slate-200 rounded-md shadow-sm p-5">
+                    <div className="grid grid-cols-6 gap-2">
+                      {historico.map((h) => (
+                        <div key={h.competencia} className="text-center">
+                          <div className="h-32 flex items-end justify-center">
+                            <div
+                              className="w-full rounded-t"
+                              style={{
+                                background: cor,
+                                opacity: 0.85,
+                                height: `${Math.max(2, h.percentual)}%`,
+                              }}
+                              title={`${h.percentual}%`}
+                            />
+                          </div>
+                          <p className="text-xs font-semibold text-slate-900 mt-2">{h.percentual}%</p>
+                          <p className="text-[10px] text-slate-500 uppercase">{labelCurtoMes(h.competencia)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mb-8">
+                  <header className="mb-3">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Empresas em atenção ({atencoes.length})
+                    </h2>
+                  </header>
+                  {atencoes.length === 0 ? (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-md p-5 text-sm text-emerald-800 text-center">
+                      Nenhuma empresa precisa de atenção. Excelente trabalho.
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden">
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {atencoes.map((emp, idx) => (
+                            <tr
+                              key={emp.id}
+                              className={`border-b border-slate-100 hover:bg-slate-50 ${
+                                idx === atencoes.length - 1 ? 'border-b-0' : ''
+                              }`}
+                            >
+                              <td className="px-4 py-2.5 text-slate-900 font-medium">{emp.nome}</td>
+                              <td className="px-4 py-2.5 text-right">
+                                <Link
+                                  href={`/empresa/${emp.id}`}
+                                  className="text-xs font-medium text-slate-700 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded px-2.5 py-1 transition"
+                                >
+                                  Abrir
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              </>
+            );
+          })()}
 
           {aba === 'controle' && (
             <>
