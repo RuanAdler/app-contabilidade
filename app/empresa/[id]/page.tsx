@@ -4,14 +4,30 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, BancoEmpresa, ProgressoChecklist } from '@/lib/types';
+import { Empresa, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist } from '@/lib/types';
 
 type Aba = 'extratos' | 'checklist';
+type StatusExtrato = 'pendente' | 'solicitado' | 'recebido' | 'importado';
+
+const STATUS_LABELS: Record<StatusExtrato, string> = {
+  pendente: 'Pendente',
+  solicitado: 'Solicitado',
+  recebido: 'Recebido',
+  importado: 'Importado',
+};
+
+const STATUS_BADGE_CLASS: Record<StatusExtrato, string> = {
+  pendente: 'bg-slate-100 text-slate-700 border-slate-300',
+  solicitado: 'bg-amber-50 text-amber-800 border-amber-300',
+  recebido: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  importado: 'bg-slate-900 text-white border-slate-900',
+};
 
 export default function EmpresaDetail() {
   const [usuario, setUsuario] = useState<any>(null);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
+  const [extratos, setExtratos] = useState<SolicitacaoExtrato[]>([]);
   const [checklist, setChecklist] = useState<ProgressoChecklist[]>([]);
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
@@ -20,6 +36,8 @@ export default function EmpresaDetail() {
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>('extratos');
   const [sidebarAberta, setSidebarAberta] = useState(true);
+  const [novoBanco, setNovoBanco] = useState('');
+  const [adicionandoBanco, setAdicionandoBanco] = useState(false);
   const router = useRouter();
   const params = useParams();
   const empresaId = params.id as string;
@@ -40,6 +58,19 @@ export default function EmpresaDetail() {
   ];
 
   const anos = Array.from({ length: 5 }, (_, i) => String(hoje.getFullYear() - 2 + i));
+
+  const carregarExtratos = async (bancosIds: string[]) => {
+    if (bancosIds.length === 0) {
+      setExtratos([]);
+      return;
+    }
+    const { data } = await supabase
+      .from('solicitacoes_extrato')
+      .select('*')
+      .in('banco_id', bancosIds)
+      .eq('competencia', competencia);
+    setExtratos(data || []);
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -63,9 +94,13 @@ export default function EmpresaDetail() {
       const { data: bancosData } = await supabase
         .from('bancos_empresa')
         .select('*')
-        .eq('empresa_id', empresaId);
+        .eq('empresa_id', empresaId)
+        .order('nome_banco');
 
-      setBancos(bancosData || []);
+      const listaBancos = bancosData || [];
+      setBancos(listaBancos);
+
+      await carregarExtratos(listaBancos.map((b) => b.id));
 
       const { data: checklistData } = await supabase
         .from('progresso_checklist')
@@ -81,6 +116,55 @@ export default function EmpresaDetail() {
 
     loadData();
   }, [router, empresaId, competencia]);
+
+  const statusDoBanco = (bancoId: string): StatusExtrato => {
+    const e = extratos.find((x) => x.banco_id === bancoId);
+    return (e?.status as StatusExtrato) || 'pendente';
+  };
+
+  const handleStatusChange = async (bancoId: string, novoStatus: StatusExtrato) => {
+    const existente = extratos.find((e) => e.banco_id === bancoId);
+    if (existente) {
+      await supabase
+        .from('solicitacoes_extrato')
+        .update({ status: novoStatus, updated_at: new Date().toISOString() })
+        .eq('id', existente.id);
+      setExtratos((prev) =>
+        prev.map((e) => (e.id === existente.id ? { ...e, status: novoStatus } : e))
+      );
+    } else {
+      const { data: novo } = await supabase
+        .from('solicitacoes_extrato')
+        .insert({ banco_id: bancoId, competencia, status: novoStatus })
+        .select()
+        .single();
+      if (novo) setExtratos((prev) => [...prev, novo]);
+    }
+  };
+
+  const handleAddBanco = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nome = novoBanco.trim();
+    if (!nome) return;
+    setAdicionandoBanco(true);
+    const { data: novo } = await supabase
+      .from('bancos_empresa')
+      .insert({ empresa_id: empresaId, nome_banco: nome })
+      .select()
+      .single();
+    if (novo) {
+      setBancos((prev) => [...prev, novo].sort((a, b) => a.nome_banco.localeCompare(b.nome_banco)));
+    }
+    setNovoBanco('');
+    setAdicionandoBanco(false);
+  };
+
+  const handleRemoveBanco = async (bancoId: string, nome: string) => {
+    if (!confirm(`Excluir o banco "${nome}"? Todos os registros de extrato deste banco serão removidos.`)) return;
+    await supabase.from('bancos_empresa').delete().eq('id', bancoId);
+    setBancos((prev) => prev.filter((b) => b.id !== bancoId));
+    setExtratos((prev) => prev.filter((e) => e.banco_id !== bancoId));
+  };
 
   const handleChecklistChange = async (progressoId: string, feito: boolean) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -125,6 +209,36 @@ export default function EmpresaDetail() {
   const concluidos = checklist.filter((c: any) => c.feito_em).length;
   const totalChecklist = checklist.length;
   const percentual = totalChecklist > 0 ? Math.round((concluidos / totalChecklist) * 100) : 0;
+
+  const bancosRecebidos = bancos.filter((b) => {
+    const s = statusDoBanco(b.id);
+    return s === 'recebido' || s === 'importado';
+  });
+  const bancosPendentes = bancos.filter((b) => {
+    const s = statusDoBanco(b.id);
+    return s !== 'recebido' && s !== 'importado';
+  });
+
+  let resumoTexto = '';
+  let resumoClasse = '';
+  let resumoTitulo = '';
+  if (bancos.length === 0) {
+    resumoTitulo = 'Sem bancos cadastrados';
+    resumoTexto = 'Cadastre os bancos da empresa para começar a controlar os extratos.';
+    resumoClasse = 'bg-slate-50 border-slate-200 text-slate-700';
+  } else if (bancosPendentes.length === 0) {
+    resumoTitulo = 'Envio concluído';
+    resumoTexto = `Todos os ${bancos.length} extratos foram recebidos para ${competencia}.`;
+    resumoClasse = 'bg-emerald-50 border-emerald-200 text-emerald-800';
+  } else if (bancosRecebidos.length === 0) {
+    resumoTitulo = 'Nenhum extrato recebido';
+    resumoTexto = `Aguardando extratos de ${bancos.length} ${bancos.length === 1 ? 'banco' : 'bancos'}.`;
+    resumoClasse = 'bg-amber-50 border-amber-200 text-amber-900';
+  } else {
+    resumoTitulo = `Faltam ${bancosPendentes.length} de ${bancos.length}`;
+    resumoTexto = `Falta extrato de: ${bancosPendentes.map((b) => b.nome_banco).join(', ')}.`;
+    resumoClasse = 'bg-amber-50 border-amber-200 text-amber-900';
+  }
 
   const itensMenu: { id: Aba; label: string; icone: React.ReactNode }[] = [
     {
@@ -263,57 +377,126 @@ export default function EmpresaDetail() {
           </div>
 
           {aba === 'extratos' && (
-            <section className="bg-white border border-slate-200 rounded-md shadow-sm">
-              <header className="px-5 py-4 border-b border-slate-200">
-                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                  Extratos bancários
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Status de solicitação por banco na competência {competencia}.
+            <div className="space-y-4">
+              <div className={`border rounded-md px-5 py-4 ${resumoClasse}`}>
+                <p className="text-xs font-semibold uppercase tracking-wider opacity-80">
+                  Situação geral · {competencia}
                 </p>
-              </header>
+                <p className="mt-1 text-base font-semibold">{resumoTitulo}</p>
+                <p className="mt-0.5 text-sm">{resumoTexto}</p>
+                {bancos.length > 0 && (
+                  <div className="mt-3 h-1.5 bg-white/60 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-current transition-all"
+                      style={{
+                        width: `${Math.round((bancosRecebidos.length / bancos.length) * 100)}%`,
+                        opacity: 0.6,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
 
-              {bancos.length === 0 ? (
-                <div className="p-8 text-center">
-                  <p className="text-sm text-slate-500">Nenhum banco cadastrado.</p>
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                        Banco
-                      </th>
-                      <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bancos.map((banco, idx) => (
-                      <tr
-                        key={banco.id}
-                        className={`border-b border-slate-100 ${
-                          idx === bancos.length - 1 ? 'border-b-0' : ''
-                        }`}
-                      >
-                        <td className="px-5 py-3 text-slate-900 font-medium">
-                          {banco.nome_banco}
-                        </td>
-                        <td className="px-5 py-3">
-                          <select className="w-full max-w-xs px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-400">
-                            <option value="pendente">Pendente</option>
-                            <option value="solicitado">Solicitado</option>
-                            <option value="recebido">Recebido</option>
-                            <option value="importado">Importado</option>
-                          </select>
-                        </td>
+              <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+                <header className="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Extratos bancários
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Atualize o status de cada banco para a competência selecionada.
+                    </p>
+                  </div>
+                  <form onSubmit={handleAddBanco} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={novoBanco}
+                      onChange={(e) => setNovoBanco(e.target.value)}
+                      placeholder="Nome do banco"
+                      className="px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    />
+                    <button
+                      type="submit"
+                      disabled={adicionandoBanco || !novoBanco.trim()}
+                      className="text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 px-3 py-1.5 rounded-md transition"
+                    >
+                      {adicionandoBanco ? 'Adicionando...' : 'Adicionar banco'}
+                    </button>
+                  </form>
+                </header>
+
+                {bancos.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-sm text-slate-500">Nenhum banco cadastrado para esta empresa.</p>
+                    <p className="text-xs text-slate-400 mt-1">Use o campo acima para adicionar o primeiro banco.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
+                          Banco
+                        </th>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
+                          Status atual
+                        </th>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">
+                          Alterar
+                        </th>
+                        <th className="px-5 py-2.5 w-10"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
+                    </thead>
+                    <tbody>
+                      {bancos.map((banco, idx) => {
+                        const status = statusDoBanco(banco.id);
+                        return (
+                          <tr
+                            key={banco.id}
+                            className={`border-b border-slate-100 ${
+                              idx === bancos.length - 1 ? 'border-b-0' : ''
+                            }`}
+                          >
+                            <td className="px-5 py-3 text-slate-900 font-medium">
+                              {banco.nome_banco}
+                            </td>
+                            <td className="px-5 py-3">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${STATUS_BADGE_CLASS[status]}`}
+                              >
+                                {STATUS_LABELS[status]}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <select
+                                value={status}
+                                onChange={(e) => handleStatusChange(banco.id, e.target.value as StatusExtrato)}
+                                className="px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                              >
+                                <option value="pendente">Pendente</option>
+                                <option value="solicitado">Solicitado</option>
+                                <option value="recebido">Recebido</option>
+                                <option value="importado">Importado</option>
+                              </select>
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              <button
+                                onClick={() => handleRemoveBanco(banco.id, banco.nome_banco)}
+                                title="Excluir banco"
+                                className="text-slate-400 hover:text-red-600 transition"
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                                </svg>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </section>
+            </div>
           )}
 
           {aba === 'checklist' && (
