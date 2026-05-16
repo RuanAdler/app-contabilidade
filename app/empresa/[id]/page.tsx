@@ -4,11 +4,22 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist } from '@/lib/types';
+import { Empresa, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, EtapaChecklist, GrupoChecklist } from '@/lib/types';
 
 type Aba = 'extratos' | 'checklist';
 type StatusExtrato = 'pendente' | 'solicitado' | 'recebido' | 'importado';
 type StatusMes = 'vazio' | 'pendente' | 'parcial' | 'concluido';
+
+const GRUPO_LABEL: Record<GrupoChecklist, string> = {
+  ativo: 'Ativo',
+  passivo: 'Passivo',
+  patrimonio_liquido: 'Patrimônio Líquido',
+};
+
+const SUBGRUPO_LABEL: Record<string, string> = {
+  circulante: 'Circulante',
+  nao_circulante: 'Não circulante',
+};
 
 const STATUS_LABELS: Record<StatusExtrato, string> = {
   pendente: 'Pendente',
@@ -30,6 +41,7 @@ export default function EmpresaDetail() {
   const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
   const [extratosAno, setExtratosAno] = useState<SolicitacaoExtrato[]>([]);
   const [checklist, setChecklist] = useState<ProgressoChecklist[]>([]);
+  const [etapas, setEtapas] = useState<EtapaChecklist[]>([]);
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
   const [mes, setMes] = useState(String(hoje.getMonth() + 1).padStart(2, '0'));
@@ -109,16 +121,19 @@ export default function EmpresaDetail() {
   }, [ano, bancos]);
 
   useEffect(() => {
-    const carregarChecklist = async () => {
-      const { data } = await supabase
-        .from('progresso_checklist')
-        .select('*, etapas_checklist(nome, ordem)')
-        .eq('empresa_id', empresaId)
-        .eq('competencia', competencia)
-        .order('etapa_id');
-      setChecklist(data || []);
+    const carregar = async () => {
+      const [{ data: etapasData }, { data: progressoData }] = await Promise.all([
+        supabase.from('etapas_checklist').select('*').order('ordem'),
+        supabase
+          .from('progresso_checklist')
+          .select('*')
+          .eq('empresa_id', empresaId)
+          .eq('competencia', competencia),
+      ]);
+      setEtapas(etapasData || []);
+      setChecklist(progressoData || []);
     };
-    carregarChecklist();
+    carregar();
   }, [empresaId, competencia]);
 
   const statusDoBanco = (bancoId: string, comp: string = competencia): StatusExtrato => {
@@ -254,28 +269,38 @@ export default function EmpresaDetail() {
     setExtratosAno((prev) => prev.filter((e) => e.banco_id !== bancoId));
   };
 
-  const handleChecklistChange = async (progressoId: string, feito: boolean) => {
+  const handleChecklistChange = async (etapaId: string, feito: boolean) => {
     const { data: { user } } = await supabase.auth.getUser();
+    const agora = new Date().toISOString();
+    const existente = checklist.find((c) => c.etapa_id === etapaId);
 
-    await supabase
-      .from('progresso_checklist')
-      .update({
-        feito_em: feito ? new Date().toISOString() : null,
-        feito_por: feito ? user?.email : null,
-      })
-      .eq('id', progressoId);
-
-    const updatedChecklist = checklist.map((item) =>
-      item.id === progressoId
-        ? {
-            ...item,
-            feito_em: feito ? new Date().toISOString() : null,
-            feito_por: feito ? (user?.email || null) : null,
-          }
-        : item
-    );
-
-    setChecklist(updatedChecklist);
+    if (existente) {
+      const { data } = await supabase
+        .from('progresso_checklist')
+        .update({
+          feito_em: feito ? agora : null,
+          feito_por: feito ? (user?.email || null) : null,
+        })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (data) {
+        setChecklist((prev) => prev.map((c) => (c.id === existente.id ? data : c)));
+      }
+    } else {
+      const { data } = await supabase
+        .from('progresso_checklist')
+        .insert({
+          empresa_id: empresaId,
+          etapa_id: etapaId,
+          competencia,
+          feito_em: feito ? agora : null,
+          feito_por: feito ? (user?.email || null) : null,
+        })
+        .select()
+        .single();
+      if (data) setChecklist((prev) => [...prev, data]);
+    }
   };
 
   if (loading) {
@@ -294,9 +319,23 @@ export default function EmpresaDetail() {
     );
   }
 
-  const concluidos = checklist.filter((c: any) => c.feito_em).length;
-  const totalChecklist = checklist.length;
+  const concluidos = checklist.filter((c) => c.feito_em).length;
+  const totalChecklist = etapas.length;
   const percentual = totalChecklist > 0 ? Math.round((concluidos / totalChecklist) * 100) : 0;
+
+  const etapasAgrupadas: Record<GrupoChecklist, Record<string, EtapaChecklist[]>> = {
+    ativo: { circulante: [], nao_circulante: [] },
+    passivo: { circulante: [], nao_circulante: [] },
+    patrimonio_liquido: { _: [] },
+  };
+  for (const e of etapas) {
+    const sub = e.subgrupo || '_';
+    if (!etapasAgrupadas[e.grupo][sub]) etapasAgrupadas[e.grupo][sub] = [];
+    etapasAgrupadas[e.grupo][sub].push(e);
+  }
+
+  const progressoPorEtapa: Record<string, ProgressoChecklist> = {};
+  checklist.forEach((c) => { progressoPorEtapa[c.etapa_id] = c; });
 
   const bancosRecebidos = bancos.filter((b) => {
     const s = statusDoBanco(b.id);
@@ -680,44 +719,85 @@ export default function EmpresaDetail() {
                   Checklist do balanço
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Etapas do fechamento contábil mensal.
+                  Marque cada conta conforme conferir o balanço da competência {competencia}.
                 </p>
               </header>
 
-              {checklist.length === 0 ? (
+              {etapas.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-sm text-slate-500">Nenhuma etapa cadastrada para esta competência.</p>
+                  <p className="text-sm text-slate-500">Nenhuma conta cadastrada.</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    O coordenador pode adicionar contas em Configurações.
+                  </p>
                 </div>
               ) : (
-                <ul className="divide-y divide-slate-100">
-                  {checklist.map((item: any) => (
-                    <li key={item.id} className="px-5 py-3 flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        id={`check-${item.id}`}
-                        checked={!!item.feito_em}
-                        onChange={(e) => handleChecklistChange(item.id, e.target.checked)}
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <label
-                          htmlFor={`check-${item.id}`}
-                          className={`text-sm font-medium cursor-pointer ${
-                            item.feito_em ? 'text-slate-400 line-through' : 'text-slate-900'
-                          }`}
-                        >
-                          {item.etapas_checklist?.nome}
-                        </label>
-                        {item.feito_em && (
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Concluído em {new Date(item.feito_em).toLocaleDateString('pt-BR')}
-                            {item.feito_por && ` por ${item.feito_por}`}
-                          </p>
-                        )}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-px bg-slate-200">
+                  {(['ativo', 'passivo', 'patrimonio_liquido'] as GrupoChecklist[]).map((grupo) => {
+                    const subgrupos = etapasAgrupadas[grupo] || {};
+                    const totalGrupo = Object.values(subgrupos).flat().length;
+                    const feitosGrupo = Object.values(subgrupos).flat().filter(
+                      (e) => progressoPorEtapa[e.id]?.feito_em
+                    ).length;
+
+                    return (
+                      <div key={grupo} className="bg-white">
+                        <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                          <h3 className="text-xs font-bold tracking-wider text-slate-700 uppercase">
+                            {GRUPO_LABEL[grupo]}
+                          </h3>
+                          <span className="text-[11px] font-medium text-slate-500">
+                            {feitosGrupo}/{totalGrupo}
+                          </span>
+                        </div>
+
+                        <div className="p-4 space-y-4">
+                          {Object.entries(subgrupos).map(([subkey, lista]) => {
+                            if (lista.length === 0) return null;
+                            return (
+                              <div key={subkey}>
+                                {subkey !== '_' && (
+                                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                    {SUBGRUPO_LABEL[subkey]}
+                                  </p>
+                                )}
+                                <ul className="space-y-1">
+                                  {lista.map((etapa) => {
+                                    const progresso = progressoPorEtapa[etapa.id];
+                                    const feito = !!progresso?.feito_em;
+                                    return (
+                                      <li key={etapa.id}>
+                                        <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer group">
+                                          <input
+                                            type="checkbox"
+                                            checked={feito}
+                                            onChange={(e) => handleChecklistChange(etapa.id, e.target.checked)}
+                                            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                                          />
+                                          <span
+                                            className={`text-sm flex-1 ${
+                                              feito ? 'text-slate-400 line-through' : 'text-slate-900'
+                                            }`}
+                                          >
+                                            {etapa.nome}
+                                          </span>
+                                          {feito && progresso?.feito_em && (
+                                            <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition">
+                                              {new Date(progresso.feito_em).toLocaleDateString('pt-BR')}
+                                            </span>
+                                          )}
+                                        </label>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                    );
+                  })}
+                </div>
               )}
             </section>
           )}

@@ -15,26 +15,28 @@ export default function Navbar({ usuario, avatarUrl }: Props) {
   const [aberto, setAberto] = useState(false);
   const [foto, setFoto] = useState<string | null>(avatarUrl ?? null);
   const [nome, setNome] = useState<string | null>(null);
+  const [cargo, setCargo] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (avatarUrl !== undefined) {
-      setFoto(avatarUrl);
-      return;
-    }
     if (!usuario?.email) return;
     supabase
       .from('analistas')
-      .select('avatar_url,nome')
+      .select('avatar_url,nome,cargo')
       .eq('email', usuario.email)
       .single()
       .then(({ data }) => {
         if (data) {
-          setFoto(data.avatar_url ?? null);
+          if (avatarUrl === undefined) setFoto(data.avatar_url ?? null);
           setNome(data.nome ?? null);
+          setCargo(data.cargo ?? null);
         }
       });
   }, [usuario?.email, avatarUrl]);
+
+  useEffect(() => {
+    if (avatarUrl !== undefined) setFoto(avatarUrl);
+  }, [avatarUrl]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -108,6 +110,15 @@ export default function Navbar({ usuario, avatarUrl }: Props) {
               >
                 Meu perfil
               </Link>
+              {cargo === 'coordenador' && (
+                <Link
+                  href="/configuracoes"
+                  onClick={() => setAberto(false)}
+                  className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Configurações
+                </Link>
+              )}
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition border-t border-slate-100"

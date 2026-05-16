@@ -38,10 +38,15 @@ export interface SolicitacaoExtrato {
   updated_at: string;
 }
 
+export type GrupoChecklist = 'ativo' | 'passivo' | 'patrimonio_liquido';
+export type SubgrupoChecklist = 'circulante' | 'nao_circulante' | null;
+
 export interface EtapaChecklist {
   id: string;
   ordem: number;
   nome: string;
+  grupo: GrupoChecklist;
+  subgrupo: SubgrupoChecklist;
   created_at: string;
 }
 
