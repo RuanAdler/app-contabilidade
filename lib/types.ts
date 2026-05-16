@@ -60,3 +60,26 @@ export interface ProgressoChecklist {
   observacao: string | null;
   created_at: string;
 }
+
+export interface ObservacaoEmpresa {
+  id: string;
+  empresa_id: string;
+  competencia: string;
+  texto: string;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface TarefaEmpresa {
+  id: string;
+  empresa_id: string;
+  competencia: string;
+  titulo: string;
+  descricao: string | null;
+  prazo: string | null;
+  feita: boolean;
+  feita_em: string | null;
+  feita_por: string | null;
+  created_at: string;
+  created_by: string | null;
+}
