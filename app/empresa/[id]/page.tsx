@@ -75,7 +75,7 @@ export default function EmpresaDetail() {
         ? {
             ...item,
             feito_em: feito ? new Date().toISOString() : null,
-            feito_por: feito ? user?.email : null,
+            feito_por: feito ? (user?.email || null) : null,
           }
         : item
     );
