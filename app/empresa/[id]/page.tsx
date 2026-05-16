@@ -8,6 +8,7 @@ import { Empresa, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist } from '@
 
 type Aba = 'extratos' | 'checklist';
 type StatusExtrato = 'pendente' | 'solicitado' | 'recebido' | 'importado';
+type StatusMes = 'vazio' | 'pendente' | 'parcial' | 'concluido';
 
 const STATUS_LABELS: Record<StatusExtrato, string> = {
   pendente: 'Pendente',
@@ -27,7 +28,7 @@ export default function EmpresaDetail() {
   const [usuario, setUsuario] = useState<any>(null);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
-  const [extratos, setExtratos] = useState<SolicitacaoExtrato[]>([]);
+  const [extratosAno, setExtratosAno] = useState<SolicitacaoExtrato[]>([]);
   const [checklist, setChecklist] = useState<ProgressoChecklist[]>([]);
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
@@ -59,19 +60,6 @@ export default function EmpresaDetail() {
 
   const anos = Array.from({ length: 5 }, (_, i) => String(hoje.getFullYear() - 2 + i));
 
-  const carregarExtratos = async (bancosIds: string[]) => {
-    if (bancosIds.length === 0) {
-      setExtratos([]);
-      return;
-    }
-    const { data } = await supabase
-      .from('solicitacoes_extrato')
-      .select('*')
-      .in('banco_id', bancosIds)
-      .eq('competencia', competencia);
-    setExtratos(data || []);
-  };
-
   useEffect(() => {
     const loadData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -97,39 +85,70 @@ export default function EmpresaDetail() {
         .eq('empresa_id', empresaId)
         .order('nome_banco');
 
-      const listaBancos = bancosData || [];
-      setBancos(listaBancos);
+      setBancos(bancosData || []);
+      setLoading(false);
+    };
 
-      await carregarExtratos(listaBancos.map((b) => b.id));
+    loadData();
+  }, [router, empresaId]);
 
-      const { data: checklistData } = await supabase
+  useEffect(() => {
+    const carregar = async () => {
+      if (bancos.length === 0) {
+        setExtratosAno([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .select('*')
+        .in('banco_id', bancos.map((b) => b.id))
+        .like('competencia', `${ano}-%`);
+      setExtratosAno(data || []);
+    };
+    carregar();
+  }, [ano, bancos]);
+
+  useEffect(() => {
+    const carregarChecklist = async () => {
+      const { data } = await supabase
         .from('progresso_checklist')
         .select('*, etapas_checklist(nome, ordem)')
         .eq('empresa_id', empresaId)
         .eq('competencia', competencia)
         .order('etapa_id');
-
-      setChecklist(checklistData || []);
-
-      setLoading(false);
+      setChecklist(data || []);
     };
+    carregarChecklist();
+  }, [empresaId, competencia]);
 
-    loadData();
-  }, [router, empresaId, competencia]);
-
-  const statusDoBanco = (bancoId: string): StatusExtrato => {
-    const e = extratos.find((x) => x.banco_id === bancoId);
+  const statusDoBanco = (bancoId: string, comp: string = competencia): StatusExtrato => {
+    const e = extratosAno.find((x) => x.banco_id === bancoId && x.competencia === comp);
     return (e?.status as StatusExtrato) || 'pendente';
   };
 
+  const statusDoMes = (numMes: string): StatusMes => {
+    if (bancos.length === 0) return 'vazio';
+    const comp = `${ano}-${numMes}`;
+    let recebidos = 0;
+    for (const b of bancos) {
+      const s = statusDoBanco(b.id, comp);
+      if (s === 'recebido' || s === 'importado') recebidos++;
+    }
+    if (recebidos === 0) return 'pendente';
+    if (recebidos === bancos.length) return 'concluido';
+    return 'parcial';
+  };
+
   const handleStatusChange = async (bancoId: string, novoStatus: StatusExtrato) => {
-    const existente = extratos.find((e) => e.banco_id === bancoId);
+    const existente = extratosAno.find(
+      (e) => e.banco_id === bancoId && e.competencia === competencia
+    );
     if (existente) {
       await supabase
         .from('solicitacoes_extrato')
         .update({ status: novoStatus, updated_at: new Date().toISOString() })
         .eq('id', existente.id);
-      setExtratos((prev) =>
+      setExtratosAno((prev) =>
         prev.map((e) => (e.id === existente.id ? { ...e, status: novoStatus } : e))
       );
     } else {
@@ -138,7 +157,7 @@ export default function EmpresaDetail() {
         .insert({ banco_id: bancoId, competencia, status: novoStatus })
         .select()
         .single();
-      if (novo) setExtratos((prev) => [...prev, novo]);
+      if (novo) setExtratosAno((prev) => [...prev, novo]);
     }
   };
 
@@ -163,7 +182,7 @@ export default function EmpresaDetail() {
     if (!confirm(`Excluir o banco "${nome}"? Todos os registros de extrato deste banco serão removidos.`)) return;
     await supabase.from('bancos_empresa').delete().eq('id', bancoId);
     setBancos((prev) => prev.filter((b) => b.id !== bancoId));
-    setExtratos((prev) => prev.filter((e) => e.banco_id !== bancoId));
+    setExtratosAno((prev) => prev.filter((e) => e.banco_id !== bancoId));
   };
 
   const handleChecklistChange = async (progressoId: string, feito: boolean) => {
@@ -359,21 +378,54 @@ export default function EmpresaDetail() {
             <div className="px-2 py-2 flex flex-wrap gap-1">
               {meses.map((m) => {
                 const ativo = mes === m.num;
+                const status = statusDoMes(m.num);
+                const pontoCor =
+                  status === 'concluido' ? 'bg-emerald-500'
+                  : status === 'parcial' ? 'bg-amber-500'
+                  : status === 'pendente' ? 'bg-slate-300'
+                  : '';
                 return (
                   <button
                     key={m.num}
                     onClick={() => setMes(m.num)}
-                    className={`flex-1 min-w-[58px] px-3 py-2 text-xs font-medium rounded transition ${
+                    title={
+                      status === 'concluido' ? 'Todos os extratos recebidos'
+                      : status === 'parcial' ? 'Recebimento parcial'
+                      : status === 'pendente' ? 'Nenhum extrato recebido'
+                      : 'Sem bancos cadastrados'
+                    }
+                    className={`relative flex-1 min-w-[58px] px-3 py-2 text-xs font-medium rounded transition ${
                       ativo
                         ? 'bg-slate-900 text-white'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
-                    {m.label}
+                    <span className="flex items-center justify-center gap-1.5">
+                      {m.label}
+                      {pontoCor && (
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${pontoCor}`} />
+                      )}
+                    </span>
                   </button>
                 );
               })}
             </div>
+            {bancos.length > 0 && (
+              <div className="px-3 pb-2 flex items-center gap-4 text-[10px] text-slate-500 uppercase tracking-wider">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Concluído
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Parcial
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
+                  Pendente
+                </span>
+              </div>
+            )}
           </div>
 
           {aba === 'extratos' && (
