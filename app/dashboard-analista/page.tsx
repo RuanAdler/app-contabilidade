@@ -39,6 +39,7 @@ export default function DashboardAnalista() {
           .from('empresas')
           .select('*')
           .eq('analista_id', analistaData.id)
+          .neq('status', 'baixada')
           .order('nome');
 
         setEmpresas(empresasData || []);
@@ -160,16 +161,24 @@ export default function DashboardAnalista() {
                         {empresa.nome}
                       </td>
                       <td className="px-4 py-3">
-                        {empresa.nao_envia_extratos ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21V3m0 0l13 4-13 5" />
-                            </svg>
-                            Não envia extratos
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {empresa.status === 'suspensa' && (
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                              Suspensa
+                            </span>
+                          )}
+                          {empresa.nao_envia_extratos && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21V3m0 0l13 4-13 5" />
+                              </svg>
+                              Não envia extratos
+                            </span>
+                          )}
+                          {empresa.status !== 'suspensa' && !empresa.nao_envia_extratos && (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link

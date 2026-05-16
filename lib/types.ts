@@ -7,6 +7,8 @@ export interface Analista {
   created_at: string;
 }
 
+export type StatusEmpresa = 'ativa' | 'baixada' | 'suspensa';
+
 export interface Empresa {
   id: string;
   nome: string;
@@ -15,6 +17,7 @@ export interface Empresa {
   created_at: string;
   nao_envia_extratos: boolean;
   marcado_em: string | null;
+  status: StatusEmpresa;
 }
 
 export interface BancoEmpresa {
