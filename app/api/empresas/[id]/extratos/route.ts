@@ -3,15 +3,16 @@ import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { searchParams } = new URL(request.url);
   const competencia = searchParams.get('competencia');
 
   let query = supabase
     .from('solicitacoes_extrato')
     .select('solicitacoes_extrato.*, bancos_empresa(nome_banco)')
-    .eq('bancos_empresa.empresa_id', params.id);
+    .eq('bancos_empresa.empresa_id', id);
 
   if (competencia) {
     query = query.eq('competencia', competencia);

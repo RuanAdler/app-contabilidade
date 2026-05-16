@@ -3,15 +3,16 @@ import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { searchParams } = new URL(request.url);
   const competencia = searchParams.get('competencia');
 
   let query = supabase
     .from('progresso_checklist')
     .select('progresso_checklist.*, etapas_checklist(nome, ordem)')
-    .eq('empresa_id', params.id)
+    .eq('empresa_id', id)
     .order('ordem', { foreignTable: 'etapas_checklist' });
 
   if (competencia) {
