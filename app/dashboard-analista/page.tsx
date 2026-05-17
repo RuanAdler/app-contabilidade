@@ -52,6 +52,8 @@ export default function DashboardAnalista() {
   const [sidebarAberta, setSidebarAberta] = useState(true);
   const [pedidosHelp, setPedidosHelp] = useState<PedidoHelp[]>([]);
   const [helpEmpresa, setHelpEmpresa] = useState('');
+  const [helpEmpresaBusca, setHelpEmpresaBusca] = useState('');
+  const [helpDropdownAberto, setHelpDropdownAberto] = useState(false);
   const [helpMensagem, setHelpMensagem] = useState('');
   const [enviandoHelp, setEnviandoHelp] = useState(false);
   const router = useRouter();
@@ -203,6 +205,14 @@ export default function DashboardAnalista() {
     [pedidosHelp]
   );
 
+  const helpSugestoes = useMemo(() => {
+    const termo = helpEmpresaBusca.trim().toLowerCase();
+    if (!termo) return empresas.slice(0, 8);
+    return empresas
+      .filter((e) => e.nome.toLowerCase().includes(termo))
+      .slice(0, 8);
+  }, [empresas, helpEmpresaBusca]);
+
   const handleCriarHelp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!helpEmpresa || !helpMensagem.trim()) return;
@@ -220,6 +230,7 @@ export default function DashboardAnalista() {
     if (data) {
       setPedidosHelp((prev) => [data, ...prev]);
       setHelpEmpresa('');
+      setHelpEmpresaBusca('');
       setHelpMensagem('');
     }
   };
@@ -291,7 +302,9 @@ export default function DashboardAnalista() {
       badge: helpsAbertos.length > 0 ? helpsAbertos.length : undefined,
       icone: (
         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <circle cx="12" cy="12" r="9" strokeWidth={1.8} />
+          <circle cx="12" cy="12" r="3" strokeWidth={1.8} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.636 5.636l3.536 3.536m5.656 0l3.536-3.536m-3.536 9.192l3.536 3.536m-9.192-3.536l-3.536 3.536" />
         </svg>
       ),
     },
@@ -584,17 +597,61 @@ export default function DashboardAnalista() {
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                       Empresa
                     </label>
-                    <select
-                      value={helpEmpresa}
-                      onChange={(e) => setHelpEmpresa(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
-                    >
-                      <option value="">— Selecione a empresa —</option>
-                      {empresas.map((e) => (
-                        <option key={e.id} value={e.id}>{e.nome}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <svg
+                        className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={helpEmpresaBusca}
+                        onChange={(e) => {
+                          setHelpEmpresaBusca(e.target.value);
+                          setHelpEmpresa('');
+                          setHelpDropdownAberto(true);
+                        }}
+                        onFocus={() => setHelpDropdownAberto(true)}
+                        onBlur={() => setTimeout(() => setHelpDropdownAberto(false), 150)}
+                        placeholder="Digite para pesquisar uma empresa..."
+                        className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                      />
+                      {helpDropdownAberto && helpSugestoes.length > 0 && (
+                        <ul className="absolute z-10 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-64 overflow-auto">
+                          {helpSugestoes.map((e) => (
+                            <li key={e.id}>
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => {
+                                  ev.preventDefault();
+                                  setHelpEmpresa(e.id);
+                                  setHelpEmpresaBusca(e.nome);
+                                  setHelpDropdownAberto(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-100 transition ${
+                                  helpEmpresa === e.id ? 'bg-slate-100 font-medium' : ''
+                                }`}
+                              >
+                                {e.nome}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {helpDropdownAberto && helpEmpresaBusca.trim() && helpSugestoes.length === 0 && (
+                        <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg px-3 py-2 text-sm text-slate-500">
+                          Nenhuma empresa encontrada.
+                        </div>
+                      )}
+                    </div>
+                    {helpEmpresa && (
+                      <p className="mt-1 text-[11px] text-emerald-700">
+                        ✓ Empresa selecionada
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -613,9 +670,9 @@ export default function DashboardAnalista() {
                     <button
                       type="submit"
                       disabled={enviandoHelp || !helpEmpresa || !helpMensagem.trim()}
-                      className="text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition"
+                      className="text-sm font-bold tracking-wider px-6 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition"
                     >
-                      {enviandoHelp ? 'Enviando...' : 'Enviar pedido de ajuda'}
+                      {enviandoHelp ? 'Enviando...' : 'HELP'}
                     </button>
                   </div>
                 </form>
