@@ -243,7 +243,7 @@ function RelatorioExtratos() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Filtros aplicados
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
                 <div>
                   <span className="text-slate-500">Competência: </span>
                   <strong className="text-slate-900">{competencia}</strong>
@@ -282,7 +282,7 @@ function RelatorioExtratos() {
               </h2>
 
               {/* Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-2.5 mb-4">
                 <div className="border border-slate-300 rounded p-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total registros</p>
                   <p className="text-2xl font-bold text-slate-900">{totalLinhas}</p>

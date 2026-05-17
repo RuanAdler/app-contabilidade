@@ -297,7 +297,7 @@ function RelatorioAnalista() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Parâmetros
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+              <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
                 <div>
                   <span className="text-slate-500">Analista: </span>
                   <strong className="text-slate-900">{analista.nome}</strong>
@@ -322,7 +322,7 @@ function RelatorioAnalista() {
               <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
                 Resumo do mês
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-2.5 mb-4">
                 <div className="border border-slate-300 rounded p-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Carteira</p>
                   <p className="text-2xl font-bold text-slate-900">{empresas.length}</p>
@@ -436,7 +436,7 @@ function RelatorioAnalista() {
                 <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
                   Empresas da carteira por status
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-3">
                   {/* Concluídos */}
                   <div className="border rounded overflow-hidden" style={{ borderColor: '#6ee7b7' }}>
                     <div className="px-3 py-2 flex items-baseline justify-between" style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>
