@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa } from '@/lib/types';
+import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp } from '@/lib/types';
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroStatus = 'todos' | StatusEmpresa;
 type StatusMes = 'sem_bancos' | 'concluido' | 'parcial' | 'pendente';
-type Aba = 'visao' | 'controle' | 'desempenho';
+type Aba = 'visao' | 'controle' | 'desempenho' | 'help';
 
 const CORES_ANALISTAS = ['#0f766e', '#b45309', '#7c3aed', '#be123c', '#0369a1'];
 
@@ -64,6 +64,8 @@ export default function DashboardCoordenador() {
   const [aba, setAba] = useState<Aba>('visao');
   const [sidebarAberta, setSidebarAberta] = useState(true);
   const [analistaDetalhado, setAnalistaDetalhado] = useState<string | null>(null);
+  const [pedidosHelp, setPedidosHelp] = useState<PedidoHelp[]>([]);
+  const [solucaoRascunho, setSolucaoRascunho] = useState<Record<string, string>>({});
 
   // Modal de adicionar empresa
   const [modalAberto, setModalAberto] = useState(false);
@@ -154,6 +156,12 @@ export default function DashboardCoordenador() {
         .from('etapas_checklist')
         .select('*', { count: 'exact', head: true });
       setTotalEtapas(countEtapas || 0);
+
+      const { data: helpData } = await supabase
+        .from('pedidos_help')
+        .select('*')
+        .order('created_at', { ascending: false });
+      setPedidosHelp(helpData || []);
 
       setLoading(false);
     };
@@ -373,6 +381,92 @@ export default function DashboardCoordenador() {
   const totalSuspensas = empresas.filter((e) => e.status === 'suspensa').length;
   const totalNaoEnvia = empresasAtivas.filter((e) => e.nao_envia_extratos).length;
 
+  // ====== Helps ======
+  const HORAS_24 = 24 * 60 * 60 * 1000;
+  const HORAS_48 = 48 * 60 * 60 * 1000;
+  const agoraMs = Date.now();
+
+  const helpsAbertos = useMemo(
+    () => pedidosHelp.filter((p) => p.status === 'aberto'),
+    [pedidosHelp]
+  );
+  const helpsVisualizados = useMemo(
+    () => pedidosHelp.filter((p) => p.status === 'visualizado'),
+    [pedidosHelp]
+  );
+  const helpsResolvidos = useMemo(
+    () => pedidosHelp.filter((p) => p.status === 'resolvido'),
+    [pedidosHelp]
+  );
+
+  const helpsUrgentes = useMemo(() => {
+    return helpsAbertos.filter(
+      (p) => agoraMs - new Date(p.created_at).getTime() >= HORAS_24
+    ).length + helpsVisualizados.filter(
+      (p) => p.visualizado_em && agoraMs - new Date(p.visualizado_em).getTime() >= HORAS_48
+    ).length;
+  }, [helpsAbertos, helpsVisualizados, agoraMs]);
+
+  const idadeHelp = (p: PedidoHelp): { urgente: boolean; texto: string } => {
+    if (p.status === 'aberto') {
+      const ms = agoraMs - new Date(p.created_at).getTime();
+      const horas = Math.floor(ms / (60 * 60 * 1000));
+      return {
+        urgente: ms >= HORAS_24,
+        texto: horas < 1 ? 'Recém-criado' : horas < 24 ? `${horas}h em aberto` : `${Math.floor(horas / 24)}d em aberto`,
+      };
+    }
+    if (p.status === 'visualizado' && p.visualizado_em) {
+      const ms = agoraMs - new Date(p.visualizado_em).getTime();
+      const horas = Math.floor(ms / (60 * 60 * 1000));
+      return {
+        urgente: ms >= HORAS_48,
+        texto: horas < 1 ? 'Visualizado agora' : horas < 24 ? `${horas}h sem resolver` : `${Math.floor(horas / 24)}d sem resolver`,
+      };
+    }
+    return { urgente: false, texto: '' };
+  };
+
+  const handleVisualizarHelp = async (id: string) => {
+    const agora = new Date().toISOString();
+    const { data } = await supabase
+      .from('pedidos_help')
+      .update({
+        status: 'visualizado',
+        visualizado_em: agora,
+        visualizado_por: usuario?.email,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (data) setPedidosHelp((prev) => prev.map((p) => (p.id === id ? data : p)));
+  };
+
+  const handleResolverHelp = async (id: string) => {
+    const solucao = (solucaoRascunho[id] || '').trim();
+    const agora = new Date().toISOString();
+    const { data } = await supabase
+      .from('pedidos_help')
+      .update({
+        status: 'resolvido',
+        resolvido_em: agora,
+        resolvido_por_email: usuario?.email,
+        resolvido_por_tipo: 'coordenador',
+        solucao: solucao || null,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (data) {
+      setPedidosHelp((prev) => prev.map((p) => (p.id === id ? data : p)));
+      setSolucaoRascunho((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+    }
+  };
+
   // Handlers
   const atualizarEmpresa = async (id: string, patch: Partial<Empresa>) => {
     const { data } = await supabase
@@ -451,7 +545,9 @@ export default function DashboardCoordenador() {
     );
   }
 
-  const itensMenu: { id: Aba; label: string; icone: React.ReactNode }[] = [
+  const helpsPendentes = helpsAbertos.length + helpsVisualizados.length;
+
+  const itensMenu: { id: Aba; label: string; icone: React.ReactNode; badge?: number; badgeUrgente?: boolean }[] = [
     {
       id: 'visao',
       label: 'Visão geral',
@@ -476,6 +572,17 @@ export default function DashboardCoordenador() {
       icone: (
         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      badge: helpsPendentes > 0 ? helpsPendentes : undefined,
+      badgeUrgente: helpsUrgentes > 0,
+      icone: (
+        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
     },
@@ -521,7 +628,20 @@ export default function DashboardCoordenador() {
                   } ${!sidebarAberta && 'justify-center px-0'}`}
                 >
                   {item.icone}
-                  {sidebarAberta && <span className="truncate">{item.label}</span>}
+                  {sidebarAberta && (
+                    <span className="flex-1 truncate flex items-center justify-between gap-2">
+                      <span>{item.label}</span>
+                      {item.badge !== undefined && (
+                        <span
+                          className={`inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-white text-[10px] font-bold ${
+                            item.badgeUrgente ? 'bg-red-600 animate-pulse' : 'bg-slate-500'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1409,6 +1529,209 @@ export default function DashboardCoordenador() {
                   )}
                 </div>
               </section>
+            </>
+          )}
+
+          {aba === 'help' && (
+            <>
+              <div className="mb-8 border-b border-slate-200 pb-6">
+                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  Suporte à equipe
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                  Pedidos de ajuda dos analistas
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  {helpsAbertos.length} aberto{helpsAbertos.length === 1 ? '' : 's'} · {helpsVisualizados.length} visualizado{helpsVisualizados.length === 1 ? '' : 's'} · {helpsResolvidos.length} resolvido{helpsResolvidos.length === 1 ? '' : 's'}
+                  {helpsUrgentes > 0 && (
+                    <span className="text-red-700 font-semibold ml-2">
+                      · {helpsUrgentes} urgente{helpsUrgentes === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {helpsAbertos.length === 0 && helpsVisualizados.length === 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-md px-5 py-8 text-center mb-6">
+                  <p className="text-sm font-semibold text-emerald-800">Nenhum pedido aberto.</p>
+                  <p className="text-xs text-emerald-700 mt-1">Tudo está sob controle no momento.</p>
+                </div>
+              )}
+
+              {helpsAbertos.length > 0 && (
+                <section className="mb-8">
+                  <header className="mb-3">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Aguardando primeira resposta
+                    </h2>
+                  </header>
+                  <ul className="space-y-3">
+                    {helpsAbertos.map((p) => {
+                      const empresa = empresas.find((e) => e.id === p.empresa_id);
+                      const idade = idadeHelp(p);
+                      return (
+                        <li
+                          key={p.id}
+                          className={`bg-white border rounded-md p-5 shadow-sm ${
+                            idade.urgente ? 'border-red-300 ring-1 ring-red-200' : 'border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {empresa?.nome || '—'}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {p.analista_email} · {new Date(p.created_at).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${
+                                idade.urgente
+                                  ? 'bg-red-50 text-red-800 border-red-300'
+                                  : 'bg-slate-100 text-slate-700 border-slate-300'
+                              }`}
+                            >
+                              {idade.urgente ? '🔴 ' : ''}
+                              {idade.texto}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap mb-4">{p.mensagem}</p>
+
+                          <div className="border-t border-slate-100 pt-3 space-y-3">
+                            <textarea
+                              value={solucaoRascunho[p.id] || ''}
+                              onChange={(e) => setSolucaoRascunho({ ...solucaoRascunho, [p.id]: e.target.value })}
+                              placeholder="Escreva a solução (opcional, se for fácil de resolver agora)..."
+                              rows={3}
+                              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
+                            />
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                              <button
+                                onClick={() => handleVisualizarHelp(p.id)}
+                                className="text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+                              >
+                                Visualizei, ajudo mais tarde
+                              </button>
+                              <button
+                                onClick={() => handleResolverHelp(p.id)}
+                                className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
+                              >
+                                Dei um help (resolver)
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {helpsVisualizados.length > 0 && (
+                <section className="mb-8">
+                  <header className="mb-3">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Visualizados, aguardando resolução
+                    </h2>
+                  </header>
+                  <ul className="space-y-3">
+                    {helpsVisualizados.map((p) => {
+                      const empresa = empresas.find((e) => e.id === p.empresa_id);
+                      const idade = idadeHelp(p);
+                      return (
+                        <li
+                          key={p.id}
+                          className={`bg-white border rounded-md p-5 shadow-sm ${
+                            idade.urgente ? 'border-red-300 ring-1 ring-red-200' : 'border-amber-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {empresa?.nome || '—'}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {p.analista_email} · criado {new Date(p.created_at).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${
+                                idade.urgente
+                                  ? 'bg-red-50 text-red-800 border-red-300 animate-pulse'
+                                  : 'bg-amber-50 text-amber-800 border-amber-300'
+                              }`}
+                            >
+                              {idade.urgente ? '🔴 ' : ''}
+                              {idade.texto}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap mb-4">{p.mensagem}</p>
+
+                          <div className="border-t border-slate-100 pt-3 space-y-3">
+                            <textarea
+                              value={solucaoRascunho[p.id] || ''}
+                              onChange={(e) => setSolucaoRascunho({ ...solucaoRascunho, [p.id]: e.target.value })}
+                              placeholder="Escreva a solução (opcional)..."
+                              rows={3}
+                              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
+                            />
+                            <div className="flex justify-end">
+                              <button
+                                onClick={() => handleResolverHelp(p.id)}
+                                className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
+                              >
+                                Marcar como resolvido
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {helpsResolvidos.length > 0 && (
+                <section>
+                  <header className="mb-3">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Resolvidos recentes
+                    </h2>
+                  </header>
+                  <ul className="space-y-3">
+                    {helpsResolvidos.slice(0, 15).map((p) => {
+                      const empresa = empresas.find((e) => e.id === p.empresa_id);
+                      return (
+                        <li key={p.id} className="bg-white border border-slate-200 rounded-md p-4 opacity-80">
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-700">{empresa?.nome || '—'}</p>
+                              <p className="text-[11px] text-slate-500">
+                                Por {p.analista_email} · resolvido por{' '}
+                                {p.resolvido_por_tipo === 'analista' ? 'ele mesmo' : 'coordenação'}
+                                {' '}em {p.resolvido_em ? new Date(p.resolvido_em).toLocaleString('pt-BR') : '—'}
+                              </p>
+                            </div>
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border bg-emerald-50 text-emerald-800 border-emerald-300">
+                              Resolvido
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-600 whitespace-pre-wrap">{p.mensagem}</p>
+                          {p.solucao && (
+                            <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded">
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 mb-1">
+                                Resposta
+                              </p>
+                              <p className="text-sm text-emerald-900 whitespace-pre-wrap">{p.solucao}</p>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
             </>
           )}
         </main>

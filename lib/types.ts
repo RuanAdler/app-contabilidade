@@ -70,6 +70,24 @@ export interface ObservacaoEmpresa {
   updated_by: string | null;
 }
 
+export type StatusHelp = 'aberto' | 'visualizado' | 'resolvido';
+export type TipoResolvedor = 'analista' | 'coordenador';
+
+export interface PedidoHelp {
+  id: string;
+  empresa_id: string;
+  analista_email: string;
+  mensagem: string;
+  status: StatusHelp;
+  visualizado_em: string | null;
+  visualizado_por: string | null;
+  resolvido_em: string | null;
+  resolvido_por_email: string | null;
+  resolvido_por_tipo: TipoResolvedor | null;
+  solucao: string | null;
+  created_at: string;
+}
+
 export interface TarefaEmpresa {
   id: string;
   empresa_id: string;

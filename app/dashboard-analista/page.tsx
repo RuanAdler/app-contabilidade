@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, ProgressoChecklist, TarefaEmpresa } from '@/lib/types';
+import { Empresa, ProgressoChecklist, TarefaEmpresa, PedidoHelp } from '@/lib/types';
 
 type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroBalanco = 'todos' | 'nao_iniciado' | 'em_andamento' | 'concluido' | 'atrasado';
 type StatusBalanco = 'nao_iniciado' | 'em_andamento' | 'concluido' | 'atrasado';
-type Aba = 'pendencias' | 'empresas';
+type Aba = 'pendencias' | 'empresas' | 'help';
 
 const hoje = new Date();
 const COMPETENCIA_ATUAL = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
@@ -50,6 +50,10 @@ export default function DashboardAnalista() {
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>('pendencias');
   const [sidebarAberta, setSidebarAberta] = useState(true);
+  const [pedidosHelp, setPedidosHelp] = useState<PedidoHelp[]>([]);
+  const [helpEmpresa, setHelpEmpresa] = useState('');
+  const [helpMensagem, setHelpMensagem] = useState('');
+  const [enviandoHelp, setEnviandoHelp] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -101,6 +105,13 @@ export default function DashboardAnalista() {
           setTarefasMes(tarefas || []);
           setTotalEtapas(count || 0);
         }
+
+        const { data: helpData } = await supabase
+          .from('pedidos_help')
+          .select('*')
+          .eq('analista_email', session.user.email)
+          .order('created_at', { ascending: false });
+        setPedidosHelp(helpData || []);
       }
 
       setLoading(false);
@@ -183,6 +194,52 @@ export default function DashboardAnalista() {
     return c;
   }, [empresas, checklistMes, tarefasMes, totalEtapas]);
 
+  const helpsAbertos = useMemo(
+    () => pedidosHelp.filter((p) => p.status !== 'resolvido'),
+    [pedidosHelp]
+  );
+  const helpsResolvidos = useMemo(
+    () => pedidosHelp.filter((p) => p.status === 'resolvido'),
+    [pedidosHelp]
+  );
+
+  const handleCriarHelp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!helpEmpresa || !helpMensagem.trim()) return;
+    setEnviandoHelp(true);
+    const { data } = await supabase
+      .from('pedidos_help')
+      .insert({
+        empresa_id: helpEmpresa,
+        analista_email: usuario?.email,
+        mensagem: helpMensagem.trim(),
+      })
+      .select()
+      .single();
+    setEnviandoHelp(false);
+    if (data) {
+      setPedidosHelp((prev) => [data, ...prev]);
+      setHelpEmpresa('');
+      setHelpMensagem('');
+    }
+  };
+
+  const handleResolverPropio = async (id: string) => {
+    if (!confirm('Marcar este help como resolvido por você mesmo?')) return;
+    const { data } = await supabase
+      .from('pedidos_help')
+      .update({
+        status: 'resolvido',
+        resolvido_em: new Date().toISOString(),
+        resolvido_por_email: usuario?.email,
+        resolvido_por_tipo: 'analista',
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    if (data) setPedidosHelp((prev) => prev.map((p) => (p.id === id ? data : p)));
+  };
+
   const handleToggleTarefa = async (tarefa: TarefaEmpresa) => {
     const { data: { user } } = await supabase.auth.getUser();
     const feita = !tarefa.feita;
@@ -225,6 +282,16 @@ export default function DashboardAnalista() {
       icone: (
         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      badge: helpsAbertos.length > 0 ? helpsAbertos.length : undefined,
+      icone: (
+        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
     },
@@ -487,6 +554,167 @@ export default function DashboardAnalista() {
                       </div>
                     )}
                   </div>
+                </section>
+              )}
+            </>
+          )}
+
+          {aba === 'help' && (
+            <>
+              <div className="mb-8 border-b border-slate-200 pb-6">
+                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  Suporte
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                  Pedir ajuda à coordenação
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Descreva sua dúvida sobre uma empresa e a coordenadora vai te responder.
+                </p>
+              </div>
+
+              <section className="mb-8 bg-white border border-slate-200 rounded-md shadow-sm">
+                <header className="px-5 py-4 border-b border-slate-200">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    Novo pedido
+                  </h2>
+                </header>
+                <form onSubmit={handleCriarHelp} className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Empresa
+                    </label>
+                    <select
+                      value={helpEmpresa}
+                      onChange={(e) => setHelpEmpresa(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                    >
+                      <option value="">— Selecione a empresa —</option>
+                      {empresas.map((e) => (
+                        <option key={e.id} value={e.id}>{e.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Mensagem
+                    </label>
+                    <textarea
+                      value={helpMensagem}
+                      onChange={(e) => setHelpMensagem(e.target.value)}
+                      required
+                      rows={4}
+                      placeholder="Descreva sua dúvida ou o que precisa de ajuda..."
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={enviandoHelp || !helpEmpresa || !helpMensagem.trim()}
+                      className="text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition"
+                    >
+                      {enviandoHelp ? 'Enviando...' : 'Enviar pedido de ajuda'}
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="mb-8">
+                <header className="mb-3 flex items-baseline justify-between">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    Em aberto
+                  </h2>
+                  <p className="text-xs text-slate-500">{helpsAbertos.length}</p>
+                </header>
+                {helpsAbertos.length === 0 ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-md p-5 text-center">
+                    <p className="text-sm text-emerald-800">Nenhum pedido em aberto.</p>
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    {helpsAbertos.map((p) => {
+                      const empresa = empresasPorId[p.empresa_id];
+                      return (
+                        <li key={p.id} className="bg-white border border-slate-200 rounded-md p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {empresa?.nome || '—'}
+                              </p>
+                              <p className="text-[11px] text-slate-500">
+                                Criado em {new Date(p.created_at).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${
+                                p.status === 'visualizado'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                  : 'bg-slate-100 text-slate-700 border-slate-300'
+                              }`}
+                            >
+                              {p.status === 'visualizado'
+                                ? `Visualizado em ${p.visualizado_em ? new Date(p.visualizado_em).toLocaleDateString('pt-BR') : '—'}`
+                                : 'Aguardando'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{p.mensagem}</p>
+                          <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                            <button
+                              onClick={() => handleResolverPropio(p.id)}
+                              className="text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+                            >
+                              Resolvi sozinho
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              {helpsResolvidos.length > 0 && (
+                <section>
+                  <header className="mb-3">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Resolvidos recentes
+                    </h2>
+                  </header>
+                  <ul className="space-y-3">
+                    {helpsResolvidos.slice(0, 10).map((p) => {
+                      const empresa = empresasPorId[p.empresa_id];
+                      return (
+                        <li key={p.id} className="bg-white border border-slate-200 rounded-md p-4 opacity-80">
+                          <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-700">
+                                {empresa?.nome || '—'}
+                              </p>
+                              <p className="text-[11px] text-slate-500">
+                                {p.resolvido_em && `Resolvido em ${new Date(p.resolvido_em).toLocaleString('pt-BR')}`}
+                                {p.resolvido_por_tipo === 'analista' && ' (por você)'}
+                                {p.resolvido_por_tipo === 'coordenador' && ` (pela coordenação)`}
+                              </p>
+                            </div>
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border bg-emerald-50 text-emerald-800 border-emerald-300">
+                              Resolvido
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-600 whitespace-pre-wrap">{p.mensagem}</p>
+                          {p.solucao && (
+                            <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded">
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 mb-1">
+                                Resposta da coordenação
+                              </p>
+                              <p className="text-sm text-emerald-900 whitespace-pre-wrap">{p.solucao}</p>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </section>
               )}
             </>
