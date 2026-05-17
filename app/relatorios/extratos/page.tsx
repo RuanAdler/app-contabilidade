@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato } from '@/lib/types';
@@ -19,7 +19,15 @@ type Linha = {
   extrato: SolicitacaoExtrato | null;
 };
 
-export default function RelatorioExtratos() {
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center"><p className="text-sm text-slate-500">Carregando...</p></div>}>
+      <RelatorioExtratos />
+    </Suspense>
+  );
+}
+
+function RelatorioExtratos() {
   const router = useRouter();
   const params = useSearchParams();
   const competencia = params.get('competencia') || '';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
@@ -23,7 +23,15 @@ function labelCurtoMes(competencia: string): string {
   return `${nomes[parseInt(mes) - 1]}/${ano.slice(2)}`;
 }
 
-export default function RelatorioAnalista() {
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center"><p className="text-sm text-slate-500">Carregando...</p></div>}>
+      <RelatorioAnalista />
+    </Suspense>
+  );
+}
+
+function RelatorioAnalista() {
   const router = useRouter();
   const params = useSearchParams();
   const analistaId = params.get('analista') || '';
