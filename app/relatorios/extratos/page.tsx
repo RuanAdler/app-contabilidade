@@ -12,6 +12,13 @@ const STATUS_LABEL: Record<string, string> = {
   importado: 'Importado',
 };
 
+const STATUS_BADGE: Record<string, { bg: string; text: string; border: string }> = {
+  pendente:   { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1' },
+  solicitado: { bg: '#fef3c7', text: '#92400e', border: '#fcd34d' },
+  recebido:   { bg: '#d1fae5', text: '#065f46', border: '#6ee7b7' },
+  importado:  { bg: '#0f172a', text: '#ffffff', border: '#0f172a' },
+};
+
 type Linha = {
   empresa: Empresa;
   analista_nome: string;
@@ -235,17 +242,17 @@ function RelatorioExtratos() {
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider">Total registros</p>
                 <p className="text-xl font-bold text-slate-900">{totalLinhas}</p>
               </div>
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Recebidos</p>
-                <p className="text-xl font-bold text-emerald-700">{recebidos}</p>
+              <div className="rounded p-3 border" style={{ backgroundColor: '#d1fae5', borderColor: '#6ee7b7' }}>
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: '#065f46' }}>Recebidos</p>
+                <p className="text-xl font-bold" style={{ color: '#065f46' }}>{recebidos}</p>
               </div>
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Solicitados</p>
-                <p className="text-xl font-bold text-amber-700">{solicitados}</p>
+              <div className="rounded p-3 border" style={{ backgroundColor: '#fef3c7', borderColor: '#fcd34d' }}>
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: '#92400e' }}>Solicitados</p>
+                <p className="text-xl font-bold" style={{ color: '#92400e' }}>{solicitados}</p>
               </div>
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Pendentes</p>
-                <p className="text-xl font-bold text-slate-700">{pendentes}</p>
+              <div className="rounded p-3 border" style={{ backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' }}>
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: '#334155' }}>Pendentes</p>
+                <p className="text-xl font-bold" style={{ color: '#334155' }}>{pendentes}</p>
               </div>
             </div>
             <p className="mt-3 text-sm text-slate-700">
@@ -304,7 +311,16 @@ function RelatorioExtratos() {
                           {l.banco.nome_banco}
                         </td>
                         <td className="px-3 py-2 border border-slate-300 align-top">
-                          <span className="font-medium">{STATUS_LABEL[status] || status}</span>
+                          <span
+                            className="inline-block px-2 py-0.5 rounded text-[11px] font-bold border"
+                            style={{
+                              backgroundColor: STATUS_BADGE[status]?.bg,
+                              color: STATUS_BADGE[status]?.text,
+                              borderColor: STATUS_BADGE[status]?.border,
+                            }}
+                          >
+                            {STATUS_LABEL[status] || status}
+                          </span>
                         </td>
                         <td className="px-3 py-2 border border-slate-300 align-top text-center text-slate-700">
                           {l.extrato?.qtd_solicitacoes || 0}×

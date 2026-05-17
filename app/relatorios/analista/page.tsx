@@ -312,17 +312,17 @@ function RelatorioAnalista() {
               </div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-3 text-center text-xs">
-              <div className="border border-slate-200 rounded p-2">
-                <p className="font-bold text-emerald-700 text-base">{concluidos}</p>
-                <p className="text-slate-500 uppercase tracking-wider text-[10px]">Concluídos</p>
+              <div className="rounded p-2 border" style={{ backgroundColor: '#d1fae5', borderColor: '#6ee7b7' }}>
+                <p className="font-bold text-base" style={{ color: '#065f46' }}>{concluidos}</p>
+                <p className="uppercase tracking-wider text-[10px]" style={{ color: '#065f46' }}>Concluídos</p>
               </div>
-              <div className="border border-slate-200 rounded p-2">
-                <p className="font-bold text-amber-700 text-base">{emAndamento}</p>
-                <p className="text-slate-500 uppercase tracking-wider text-[10px]">Em andamento</p>
+              <div className="rounded p-2 border" style={{ backgroundColor: '#fef3c7', borderColor: '#fcd34d' }}>
+                <p className="font-bold text-base" style={{ color: '#92400e' }}>{emAndamento}</p>
+                <p className="uppercase tracking-wider text-[10px]" style={{ color: '#92400e' }}>Em andamento</p>
               </div>
-              <div className="border border-slate-200 rounded p-2">
-                <p className="font-bold text-slate-700 text-base">{naoIniciados}</p>
-                <p className="text-slate-500 uppercase tracking-wider text-[10px]">Não iniciados</p>
+              <div className="rounded p-2 border" style={{ backgroundColor: '#fee2e2', borderColor: '#fca5a5' }}>
+                <p className="font-bold text-base" style={{ color: '#991b1b' }}>{naoIniciados}</p>
+                <p className="uppercase tracking-wider text-[10px]" style={{ color: '#991b1b' }}>Não iniciados</p>
               </div>
             </div>
           </section>
@@ -424,10 +424,19 @@ function RelatorioAnalista() {
                         <td className="px-3 py-2 border border-slate-300 text-slate-700">
                           {t.prazo ? new Date(t.prazo + 'T00:00').toLocaleDateString('pt-BR') : '—'}
                         </td>
-                        <td className={`px-3 py-2 border border-slate-300 font-medium ${
-                          t.feita ? 'text-emerald-700' : atrasada ? 'text-red-700' : 'text-slate-700'
-                        }`}>
-                          {t.feita ? 'Concluída' : atrasada ? 'Atrasada' : 'Pendente'}
+                        <td className="px-3 py-2 border border-slate-300">
+                          <span
+                            className="inline-block px-2 py-0.5 rounded text-[11px] font-bold border"
+                            style={
+                              t.feita
+                                ? { backgroundColor: '#d1fae5', color: '#065f46', borderColor: '#6ee7b7' }
+                                : atrasada
+                                ? { backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#fca5a5' }
+                                : { backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }
+                            }
+                          >
+                            {t.feita ? 'Concluída' : atrasada ? 'Atrasada' : 'Pendente'}
+                          </span>
                         </td>
                       </tr>
                     );
