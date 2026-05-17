@@ -71,6 +71,7 @@ export default function DashboardCoordenador() {
   const [relExtrCompetencia, setRelExtrCompetencia] = useState(COMPETENCIA_ATUAL);
   const [relExtrAnalista, setRelExtrAnalista] = useState('todos');
   const [relExtrStatus, setRelExtrStatus] = useState('todos');
+  const [relExtrEnvio, setRelExtrEnvio] = useState('todas');
   const [relAnaAnalista, setRelAnaAnalista] = useState('');
   const [relAnaCompetencia, setRelAnaCompetencia] = useState(COMPETENCIA_ATUAL);
 
@@ -1821,9 +1822,23 @@ export default function DashboardCoordenador() {
                         <option value="importado">Apenas importados</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Empresas
+                      </label>
+                      <select
+                        value={relExtrEnvio}
+                        onChange={(e) => setRelExtrEnvio(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                      >
+                        <option value="todas">Todas</option>
+                        <option value="regulares">Apenas regulares</option>
+                        <option value="nao_envia">Apenas "não envia extratos"</option>
+                      </select>
+                    </div>
                     <div className="pt-2">
                       <a
-                        href={`/relatorios/extratos?competencia=${relExtrCompetencia}&analista=${relExtrAnalista}&status=${relExtrStatus}`}
+                        href={`/relatorios/extratos?competencia=${relExtrCompetencia}&analista=${relExtrAnalista}&status=${relExtrStatus}&envio=${relExtrEnvio}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 transition"

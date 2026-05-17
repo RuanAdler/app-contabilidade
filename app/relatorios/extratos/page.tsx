@@ -33,6 +33,7 @@ function RelatorioExtratos() {
   const competencia = params.get('competencia') || '';
   const analistaFiltro = params.get('analista') || 'todos';
   const statusFiltro = params.get('status') || 'todos';
+  const envioFiltro = params.get('envio') || 'todas';
 
   const [loading, setLoading] = useState(true);
   const [autorizado, setAutorizado] = useState(false);
@@ -72,6 +73,8 @@ function RelatorioExtratos() {
 
       let qEmpresas = supabase.from('empresas').select('*').eq('status', 'ativa').order('nome');
       if (analistaFiltro !== 'todos') qEmpresas = qEmpresas.eq('analista_id', analistaFiltro);
+      if (envioFiltro === 'regulares') qEmpresas = qEmpresas.eq('nao_envia_extratos', false);
+      if (envioFiltro === 'nao_envia') qEmpresas = qEmpresas.eq('nao_envia_extratos', true);
       const { data: empresasData } = await qEmpresas;
       const empresas = empresasData || [];
 
@@ -132,7 +135,7 @@ function RelatorioExtratos() {
       setLoading(false);
     };
     carregar();
-  }, [router, competencia, analistaFiltro, statusFiltro]);
+  }, [router, competencia, analistaFiltro, statusFiltro, envioFiltro]);
 
   if (loading) {
     return (
@@ -215,8 +218,10 @@ function RelatorioExtratos() {
             <p className="mt-1 text-sm text-slate-600">
               Competência: <strong>{competencia}</strong> · Analista: <strong>{nomeAnalistaFiltro}</strong>
               {statusFiltro !== 'todos' && (
-                <> · Filtro: <strong>{STATUS_LABEL[statusFiltro] || statusFiltro}</strong></>
+                <> · Status: <strong>{STATUS_LABEL[statusFiltro] || statusFiltro}</strong></>
               )}
+              {envioFiltro === 'regulares' && <> · Empresas: <strong>regulares</strong></>}
+              {envioFiltro === 'nao_envia' && <> · Empresas: <strong>não envia extratos</strong></>}
             </p>
           </header>
 
