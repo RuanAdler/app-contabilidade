@@ -63,11 +63,12 @@ export default function Navbar({ usuario, avatarUrl }: Props) {
     <nav className="bg-slate-900 border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3">
-          <span className="inline-flex items-center justify-center h-8 w-8 rounded bg-white">
-            <span className="text-slate-900 font-bold text-xs tracking-tight">RA</span>
+          <span className="inline-flex items-center justify-center h-8 w-8 rounded bg-white overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Controle Contábil" className="h-full w-full object-contain" />
           </span>
           <span className="text-white text-sm font-semibold tracking-tight">
-            R.A. Contabilidade
+            Controle Contábil
           </span>
         </Link>
 

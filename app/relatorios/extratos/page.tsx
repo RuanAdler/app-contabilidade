@@ -192,11 +192,12 @@ function RelatorioExtratos() {
           <header className="pb-6 border-b border-slate-300 mb-6">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center h-10 w-10 rounded bg-slate-900">
-                  <span className="text-white font-bold text-sm tracking-tight">RA</span>
+                <span className="inline-flex items-center justify-center h-12 w-12">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logo.png" alt="Controle Contábil" className="h-full w-full object-contain" />
                 </span>
                 <div>
-                  <p className="text-base font-bold text-slate-900 tracking-tight">R.A. Contabilidade</p>
+                  <p className="text-base font-bold text-slate-900 tracking-tight">Controle Contábil</p>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Documento interno</p>
                 </div>
               </div>
@@ -318,7 +319,7 @@ function RelatorioExtratos() {
 
           {/* Rodapé */}
           <footer className="mt-8 pt-4 border-t border-slate-300 text-xs text-slate-500 flex items-center justify-between gap-3 flex-wrap">
-            <span>Relatório gerado pelo sistema interno R.A. Contabilidade.</span>
+            <span>Relatório gerado pelo sistema interno Controle Contábil.</span>
             <span>Página gerada em {new Date().toLocaleString('pt-BR')}.</span>
           </footer>
         </div>

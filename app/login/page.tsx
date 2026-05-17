@@ -44,12 +44,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded bg-slate-900 mb-4">
-            <span className="text-white font-bold text-lg tracking-tight">RA</span>
+          <div className="inline-flex items-center justify-center h-28 w-28 mb-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Controle Contábil" className="h-full w-full object-contain" />
           </div>
-          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
-            R.A. Contabilidade
-          </h1>
           <p className="mt-1 text-sm text-slate-500">
             Sistema interno de gestão de carteira
           </p>

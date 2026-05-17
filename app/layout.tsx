@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "R.A. Contabilidade — Sistema interno",
+  title: "Controle Contábil",
   description: "Gestão de carteira, extratos bancários e fechamento contábil",
 };
 
