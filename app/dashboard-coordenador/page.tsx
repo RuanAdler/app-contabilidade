@@ -11,7 +11,7 @@ type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroStatus = 'todos' | StatusEmpresa;
 type StatusMes = 'sem_bancos' | 'concluido' | 'parcial' | 'pendente';
-type Aba = 'visao' | 'controle' | 'desempenho' | 'help';
+type Aba = 'visao' | 'controle' | 'desempenho' | 'help' | 'relatorios';
 
 const CORES_ANALISTAS = ['#0f766e', '#b45309', '#7c3aed', '#be123c', '#0369a1'];
 
@@ -66,6 +66,13 @@ export default function DashboardCoordenador() {
   const [analistaDetalhado, setAnalistaDetalhado] = useState<string | null>(null);
   const [pedidosHelp, setPedidosHelp] = useState<PedidoHelp[]>([]);
   const [solucaoRascunho, setSolucaoRascunho] = useState<Record<string, string>>({});
+
+  // Filtros dos relatórios
+  const [relExtrCompetencia, setRelExtrCompetencia] = useState(COMPETENCIA_ATUAL);
+  const [relExtrAnalista, setRelExtrAnalista] = useState('todos');
+  const [relExtrStatus, setRelExtrStatus] = useState('todos');
+  const [relAnaAnalista, setRelAnaAnalista] = useState('');
+  const [relAnaCompetencia, setRelAnaCompetencia] = useState(COMPETENCIA_ATUAL);
 
   // Modal de adicionar empresa
   const [modalAberto, setModalAberto] = useState(false);
@@ -585,6 +592,15 @@ export default function DashboardCoordenador() {
           <circle cx="12" cy="12" r="9" strokeWidth={1.8} />
           <circle cx="12" cy="12" r="3" strokeWidth={1.8} />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5.636 5.636l3.536 3.536m5.656 0l3.536-3.536m-3.536 9.192l3.536 3.536m-9.192-3.536l-3.536 3.536" />
+        </svg>
+      ),
+    },
+    {
+      id: 'relatorios',
+      label: 'Relatórios',
+      icone: (
+        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       ),
     },
@@ -1734,6 +1750,166 @@ export default function DashboardCoordenador() {
                   </ul>
                 </section>
               )}
+            </>
+          )}
+
+          {aba === 'relatorios' && (
+            <>
+              <div className="mb-8 border-b border-slate-200 pb-6">
+                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  Documentação
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                  Relatórios
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Gere documentos para auditoria, reuniões e arquivamento. Após visualizar, use o botão "Imprimir / Salvar como PDF".
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Relatório mensal de extratos */}
+                <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+                  <header className="px-5 py-4 border-b border-slate-200">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Relatório mensal de extratos
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Status dos extratos bancários por empresa na competência selecionada.
+                    </p>
+                  </header>
+                  <div className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Competência
+                      </label>
+                      <input
+                        type="month"
+                        value={relExtrCompetencia}
+                        onChange={(e) => setRelExtrCompetencia(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Analista
+                      </label>
+                      <select
+                        value={relExtrAnalista}
+                        onChange={(e) => setRelExtrAnalista(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                      >
+                        <option value="todos">Todos os analistas</option>
+                        {analistas.map((a) => (
+                          <option key={a.id} value={a.id}>{a.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Filtrar por status
+                      </label>
+                      <select
+                        value={relExtrStatus}
+                        onChange={(e) => setRelExtrStatus(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                      >
+                        <option value="todos">Todos</option>
+                        <option value="pendente">Apenas pendentes</option>
+                        <option value="solicitado">Apenas solicitados</option>
+                        <option value="recebido">Apenas recebidos</option>
+                        <option value="importado">Apenas importados</option>
+                      </select>
+                    </div>
+                    <div className="pt-2">
+                      <a
+                        href={`/relatorios/extratos?competencia=${relExtrCompetencia}&analista=${relExtrAnalista}&status=${relExtrStatus}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v4a1 1 0 001 1h4M5 8V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2v-3m-3 0h10m0 0l-3-3m3 3l-3 3" />
+                        </svg>
+                        Gerar relatório
+                      </a>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Relatório individual por analista */}
+                <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+                  <header className="px-5 py-4 border-b border-slate-200">
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Relatório individual por analista
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Desempenho consolidado de um analista para o mês escolhido. Bom para reuniões individuais.
+                    </p>
+                  </header>
+                  <div className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Analista
+                      </label>
+                      <select
+                        value={relAnaAnalista}
+                        onChange={(e) => setRelAnaAnalista(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                      >
+                        <option value="">— Selecione o analista —</option>
+                        {analistas.map((a) => (
+                          <option key={a.id} value={a.id}>{a.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Competência de referência
+                      </label>
+                      <input
+                        type="month"
+                        value={relAnaCompetencia}
+                        onChange={(e) => setRelAnaCompetencia(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                      />
+                    </div>
+                    <div className="pt-2">
+                      {relAnaAnalista ? (
+                        <a
+                          href={`/relatorios/analista?analista=${relAnaAnalista}&competencia=${relAnaCompetencia}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v4a1 1 0 001 1h4M5 8V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2v-3m-3 0h10m0 0l-3-3m3 3l-3 3" />
+                          </svg>
+                          Gerar relatório
+                        </a>
+                      ) : (
+                        <button
+                          disabled
+                          className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded bg-slate-300 text-white cursor-not-allowed"
+                        >
+                          Selecione um analista
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="mt-8 bg-slate-100 border border-slate-200 rounded-md p-5 text-sm text-slate-600">
+                <p className="font-semibold text-slate-900 mb-1">Como salvar como PDF</p>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>Clique em "Gerar relatório" — abre em nova aba.</li>
+                  <li>Na página do relatório, clique no botão "Imprimir / Salvar como PDF".</li>
+                  <li>Na janela do navegador, em <strong>Destino</strong>, escolha <strong>"Salvar como PDF"</strong>.</li>
+                  <li>Em "Mais configurações", desmarque "Cabeçalhos e rodapés" para um documento limpo.</li>
+                  <li>Clique em <strong>Salvar</strong>.</li>
+                </ol>
+              </div>
             </>
           )}
         </main>
