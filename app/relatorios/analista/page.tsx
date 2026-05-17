@@ -254,203 +254,286 @@ function RelatorioAnalista() {
       </div>
 
       <div className="max-w-5xl mx-auto px-6 py-8 print:p-0 print:max-w-none">
-        <div className="bg-white print:bg-transparent border border-slate-200 print:border-0 rounded-md print:rounded-none shadow-sm print:shadow-none p-8 print:p-0">
-          {/* Cabeçalho */}
-          <header className="pb-6 border-b border-slate-300 mb-6">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center h-12 w-12">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/logo.png" alt="Controle Contábil" className="h-full w-full object-contain" />
-                </span>
+        <div className="bg-white print:bg-transparent border border-slate-200 print:border-0 rounded-md print:rounded-none shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
+
+          {/* === 1. Barra superior escura (identidade) === */}
+          <div className="bg-slate-900 text-white px-8 py-3 print:px-6 flex items-center justify-between print-avoid-break">
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex items-center justify-center h-8 w-8 bg-white rounded">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="Controle Contábil" className="h-full w-full object-contain p-0.5" />
+              </span>
+              <div>
+                <p className="text-sm font-bold tracking-tight leading-tight">Controle Contábil</p>
+                <p className="text-[9px] uppercase tracking-[0.15em] opacity-70">Sistema interno</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-[0.15em] opacity-70">Documento</p>
+              <p className="text-xs font-medium">Desempenho Individual</p>
+            </div>
+          </div>
+
+          <div className="px-8 py-7 print:px-6 print:py-4">
+
+            {/* === Título === */}
+            <header className="mb-6 print-avoid-break">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Relatório de desempenho · {competencia}
+              </p>
+              <h1 className="mt-1 text-3xl font-bold text-slate-900 leading-tight">
+                {analista.nome}
+              </h1>
+              <p className="mt-1 text-sm text-slate-600">
+                {empresas.length} empresa{empresas.length === 1 ? '' : 's'} na carteira · {analista.email}
+              </p>
+            </header>
+
+            {/* === 2. Box de filtros aplicados === */}
+            <section className="mb-6 bg-slate-50 border border-slate-200 rounded px-4 py-3 print-avoid-break">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                Parâmetros
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
                 <div>
-                  <p className="text-base font-bold text-slate-900 tracking-tight">Controle Contábil</p>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Documento interno</p>
+                  <span className="text-slate-500">Analista: </span>
+                  <strong className="text-slate-900">{analista.nome}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500">Competência: </span>
+                  <strong className="text-slate-900">{competencia}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500">Gerado em: </span>
+                  <strong className="text-slate-900">{new Date().toLocaleString('pt-BR')}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500">Gerado por: </span>
+                  <strong className="text-slate-900">{geradoPor}</strong>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Gerado em</p>
-                <p className="text-sm text-slate-900 font-medium">
-                  {new Date().toLocaleString('pt-BR')}
-                </p>
-                <p className="text-[10px] text-slate-500 mt-0.5">por {geradoPor}</p>
-              </div>
-            </div>
-            <h1 className="mt-6 text-2xl font-bold text-slate-900">
-              Relatório Individual de Desempenho
-            </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Analista: <strong>{analista.nome}</strong> · {analista.email} · Competência: <strong>{competencia}</strong>
-            </p>
-          </header>
+            </section>
 
-          {/* Resumo */}
-          <section className="mb-6 print-avoid-break">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-              Resumo do mês
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Carteira</p>
-                <p className="text-xl font-bold text-slate-900">{empresas.length}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">empresas ativas</p>
+            {/* === 3. Resumo com mini-gráfico === */}
+            <section className="mb-7 print-avoid-break">
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
+                Resumo do mês
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
+                <div className="border border-slate-300 rounded p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Carteira</p>
+                  <p className="text-2xl font-bold text-slate-900">{empresas.length}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">empresas ativas</p>
+                </div>
+                <div className="border border-slate-300 rounded p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Balanços</p>
+                  <p className="text-2xl font-bold text-emerald-700">{percentConcluidos}%</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{concluidos} de {empresas.length}</p>
+                </div>
+                <div className="border border-slate-300 rounded p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Extratos</p>
+                  <p className="text-2xl font-bold text-emerald-700">{percentExtratos}%</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{bancosRecebidos} de {totalBancos} bancos</p>
+                </div>
+                <div className="border border-slate-300 rounded p-3">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Em atenção</p>
+                  <p className="text-2xl font-bold text-amber-700">{atencoes.length}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">empresas</p>
+                </div>
               </div>
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Balanços concluídos</p>
-                <p className="text-xl font-bold text-emerald-700">{percentConcluidos}%</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">{concluidos} de {empresas.length}</p>
-              </div>
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Extratos recebidos</p>
-                <p className="text-xl font-bold text-emerald-700">{percentExtratos}%</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">{bancosRecebidos} de {totalBancos} bancos</p>
-              </div>
-              <div className="border border-slate-300 rounded p-3">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider">Em atenção</p>
-                <p className="text-xl font-bold text-amber-700">{atencoes.length}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">empresas</p>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-3 text-center text-xs">
-              <div className="rounded p-2 border" style={{ backgroundColor: '#d1fae5', borderColor: '#6ee7b7' }}>
-                <p className="font-bold text-base" style={{ color: '#065f46' }}>{concluidos}</p>
-                <p className="uppercase tracking-wider text-[10px]" style={{ color: '#065f46' }}>Concluídos</p>
-              </div>
-              <div className="rounded p-2 border" style={{ backgroundColor: '#fef3c7', borderColor: '#fcd34d' }}>
-                <p className="font-bold text-base" style={{ color: '#92400e' }}>{emAndamento}</p>
-                <p className="uppercase tracking-wider text-[10px]" style={{ color: '#92400e' }}>Em andamento</p>
-              </div>
-              <div className="rounded p-2 border" style={{ backgroundColor: '#fee2e2', borderColor: '#fca5a5' }}>
-                <p className="font-bold text-base" style={{ color: '#991b1b' }}>{naoIniciados}</p>
-                <p className="uppercase tracking-wider text-[10px]" style={{ color: '#991b1b' }}>Não iniciados</p>
-              </div>
-            </div>
-          </section>
 
-          {/* Evolução 6 meses */}
-          <section className="mb-6 print-avoid-break">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-              Evolução · últimos 6 meses
-            </h2>
-            <p className="text-xs text-slate-600 mb-2">% de empresas com balanço 100% concluído por mês.</p>
-            <div className="grid grid-cols-6 gap-2">
-              {historico.map((h) => (
-                <div key={h.competencia} className="text-center border border-slate-200 rounded p-2">
-                  <div className="h-20 flex items-end justify-center mb-1">
-                    <div
-                      className="w-full rounded-t bg-slate-700"
-                      style={{ height: `${Math.max(2, h.percentual)}%` }}
-                    />
+              {/* Barra horizontal proporcional dos balanços */}
+              {empresas.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Distribuição dos balanços</p>
+                  <div className="flex h-6 rounded overflow-hidden border border-slate-300">
+                    {concluidos > 0 && (
+                      <div
+                        className="flex items-center justify-center text-[10px] font-bold"
+                        style={{
+                          width: `${(concluidos / empresas.length) * 100}%`,
+                          backgroundColor: '#10b981',
+                          color: 'white',
+                        }}
+                      >
+                        {concluidos / empresas.length >= 0.08 && `${Math.round((concluidos / empresas.length) * 100)}%`}
+                      </div>
+                    )}
+                    {emAndamento > 0 && (
+                      <div
+                        className="flex items-center justify-center text-[10px] font-bold"
+                        style={{
+                          width: `${(emAndamento / empresas.length) * 100}%`,
+                          backgroundColor: '#f59e0b',
+                          color: 'white',
+                        }}
+                      >
+                        {emAndamento / empresas.length >= 0.08 && `${Math.round((emAndamento / empresas.length) * 100)}%`}
+                      </div>
+                    )}
+                    {naoIniciados > 0 && (
+                      <div
+                        className="flex items-center justify-center text-[10px] font-bold"
+                        style={{
+                          width: `${(naoIniciados / empresas.length) * 100}%`,
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                        }}
+                      >
+                        {naoIniciados / empresas.length >= 0.08 && `${Math.round((naoIniciados / empresas.length) * 100)}%`}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm font-bold text-slate-900">{h.percentual}%</p>
-                  <p className="text-[10px] text-slate-500 uppercase">{labelCurtoMes(h.competencia)}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: '#10b981' }} />
+                      Concluídos ({concluidos})
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />
+                      Em andamento ({emAndamento})
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
+                      Não iniciados ({naoIniciados})
+                    </span>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              )}
+            </section>
 
-          {/* Empresas em atenção */}
-          <section className="mb-6 print-avoid-break">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-              Empresas que precisam de atenção ({atencoes.length})
-            </h2>
-            {atencoes.length === 0 ? (
-              <p className="text-sm text-slate-500 py-3 px-4 border border-emerald-200 bg-emerald-50 rounded">
-                Nenhuma empresa em estado crítico no período.
-              </p>
-            ) : (
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className="text-left px-3 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 border border-slate-300">
-                      Empresa
-                    </th>
-                    <th className="text-left px-3 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 border border-slate-300">
-                      Motivo
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {atencoes.map((x, idx) => (
-                    <tr key={idx}>
-                      <td className="px-3 py-2 border border-slate-300 text-slate-900">{x.empresa.nome}</td>
-                      <td className="px-3 py-2 border border-slate-300 text-slate-700">{x.motivo}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
+            {/* Evolução 6 meses */}
+            <section className="mb-7 print-avoid-break">
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
+                Evolução · últimos 6 meses
+              </h2>
+              <p className="text-xs text-slate-600 mb-3">% de empresas com balanço 100% concluído por mês.</p>
+              <div className="grid grid-cols-6 gap-2">
+                {historico.map((h) => (
+                  <div key={h.competencia} className="text-center border border-slate-200 rounded p-2 bg-slate-50">
+                    <div className="h-20 flex items-end justify-center mb-1">
+                      <div
+                        className="w-full rounded-t"
+                        style={{
+                          height: `${Math.max(2, h.percentual)}%`,
+                          backgroundColor: h.percentual >= 80 ? '#10b981' : h.percentual >= 50 ? '#f59e0b' : '#94a3b8',
+                        }}
+                      />
+                    </div>
+                    <p className="text-sm font-bold text-slate-900">{h.percentual}%</p>
+                    <p className="text-[10px] text-slate-500 uppercase">{labelCurtoMes(h.competencia)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
 
-          {/* Tarefas */}
-          <section className="mb-6 print-avoid-break">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-              Tarefas do mês ({tarefas.length})
-            </h2>
-            <p className="text-xs text-slate-600 mb-2">
-              {tarefasFeitas} concluída{tarefasFeitas === 1 ? '' : 's'} · {tarefas.length - tarefasFeitas} pendente{(tarefas.length - tarefasFeitas) === 1 ? '' : 's'}
-              {tarefasAtrasadas.length > 0 && <span className="text-red-700 font-semibold"> · {tarefasAtrasadas.length} atrasada{tarefasAtrasadas.length === 1 ? '' : 's'}</span>}
-            </p>
-            {tarefas.length === 0 ? (
-              <p className="text-sm text-slate-500 py-3 px-4 border border-slate-200 rounded">
-                Sem tarefas registradas para a competência.
-              </p>
-            ) : (
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className="text-left px-3 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 border border-slate-300">
-                      Empresa
-                    </th>
-                    <th className="text-left px-3 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 border border-slate-300">
-                      Tarefa
-                    </th>
-                    <th className="text-left px-3 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 border border-slate-300">
-                      Prazo
-                    </th>
-                    <th className="text-left px-3 py-2 font-bold text-[10px] uppercase tracking-wider text-slate-700 border border-slate-300">
-                      Situação
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tarefas.map((t) => {
-                    const atrasada = !t.feita && t.prazo && t.prazo < HOJE_STR;
-                    const emp = empresaPorId[t.empresa_id];
-                    return (
-                      <tr key={t.id}>
-                        <td className="px-3 py-2 border border-slate-300 text-slate-900">{emp?.nome || '—'}</td>
-                        <td className="px-3 py-2 border border-slate-300 text-slate-700">{t.titulo}</td>
-                        <td className="px-3 py-2 border border-slate-300 text-slate-700">
-                          {t.prazo ? new Date(t.prazo + 'T00:00').toLocaleDateString('pt-BR') : '—'}
-                        </td>
-                        <td className="px-3 py-2 border border-slate-300">
-                          <span
-                            className="inline-block px-2 py-0.5 rounded text-[11px] font-bold border"
-                            style={
-                              t.feita
-                                ? { backgroundColor: '#d1fae5', color: '#065f46', borderColor: '#6ee7b7' }
-                                : atrasada
-                                ? { backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#fca5a5' }
-                                : { backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }
-                            }
-                          >
-                            {t.feita ? 'Concluída' : atrasada ? 'Atrasada' : 'Pendente'}
-                          </span>
-                        </td>
+            {/* Empresas em atenção */}
+            <section className="mb-7 print-avoid-break">
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
+                Empresas que precisam de atenção ({atencoes.length})
+              </h2>
+              {atencoes.length === 0 ? (
+                <p className="text-sm py-3 px-4 border rounded" style={{ backgroundColor: '#d1fae5', borderColor: '#6ee7b7', color: '#065f46' }}>
+                  Nenhuma empresa em estado crítico no período.
+                </p>
+              ) : (
+                <div className="border border-slate-300 rounded overflow-hidden">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr style={{ backgroundColor: '#0f172a' }}>
+                        <th className="text-left px-3 py-2.5 font-bold text-[10px] uppercase tracking-wider text-white">
+                          Empresa
+                        </th>
+                        <th className="text-left px-3 py-2.5 font-bold text-[10px] uppercase tracking-wider text-white">
+                          Motivo
+                        </th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </section>
+                    </thead>
+                    <tbody>
+                      {atencoes.map((x, idx) => (
+                        <tr key={idx} style={idx % 2 === 1 ? { backgroundColor: '#fcfcfd' } : undefined}>
+                          <td className="px-3 py-2 border-t border-slate-100 text-slate-900 font-medium">{x.empresa.nome}</td>
+                          <td className="px-3 py-2 border-t border-slate-100 text-slate-700">{x.motivo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
 
-          {/* Rodapé */}
-          <footer className="mt-8 pt-4 border-t border-slate-300 text-xs text-slate-500 flex items-center justify-between gap-3 flex-wrap">
-            <span>Relatório gerado pelo sistema interno Controle Contábil.</span>
-            <span>Página gerada em {new Date().toLocaleString('pt-BR')}.</span>
-          </footer>
+            {/* Tarefas */}
+            <section className="mb-7 print-avoid-break">
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
+                Tarefas do mês ({tarefas.length})
+              </h2>
+              <p className="text-xs text-slate-600 mb-3">
+                {tarefasFeitas} concluída{tarefasFeitas === 1 ? '' : 's'} · {tarefas.length - tarefasFeitas} pendente{(tarefas.length - tarefasFeitas) === 1 ? '' : 's'}
+                {tarefasAtrasadas.length > 0 && <span className="text-red-700 font-semibold"> · {tarefasAtrasadas.length} atrasada{tarefasAtrasadas.length === 1 ? '' : 's'}</span>}
+              </p>
+              {tarefas.length === 0 ? (
+                <p className="text-sm text-slate-500 py-3 px-4 border border-slate-200 rounded">
+                  Sem tarefas registradas para a competência.
+                </p>
+              ) : (
+                <div className="border border-slate-300 rounded overflow-hidden">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr style={{ backgroundColor: '#0f172a' }}>
+                        <th className="text-left px-3 py-2.5 font-bold text-[10px] uppercase tracking-wider text-white">
+                          Empresa
+                        </th>
+                        <th className="text-left px-3 py-2.5 font-bold text-[10px] uppercase tracking-wider text-white">
+                          Tarefa
+                        </th>
+                        <th className="text-left px-3 py-2.5 font-bold text-[10px] uppercase tracking-wider text-white">
+                          Prazo
+                        </th>
+                        <th className="text-left px-3 py-2.5 font-bold text-[10px] uppercase tracking-wider text-white">
+                          Situação
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tarefas.map((t, idx) => {
+                        const atrasada = !t.feita && t.prazo && t.prazo < HOJE_STR;
+                        const emp = empresaPorId[t.empresa_id];
+                        return (
+                          <tr key={t.id} style={idx % 2 === 1 ? { backgroundColor: '#fcfcfd' } : undefined}>
+                            <td className="px-3 py-2 border-t border-slate-100 text-slate-900 font-medium">{emp?.nome || '—'}</td>
+                            <td className="px-3 py-2 border-t border-slate-100 text-slate-700">{t.titulo}</td>
+                            <td className="px-3 py-2 border-t border-slate-100 text-slate-700">
+                              {t.prazo ? new Date(t.prazo + 'T00:00').toLocaleDateString('pt-BR') : '—'}
+                            </td>
+                            <td className="px-3 py-2 border-t border-slate-100">
+                              <span
+                                className="inline-block px-2 py-0.5 rounded text-[11px] font-bold border"
+                                style={
+                                  t.feita
+                                    ? { backgroundColor: '#d1fae5', color: '#065f46', borderColor: '#6ee7b7' }
+                                    : atrasada
+                                    ? { backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#fca5a5' }
+                                    : { backgroundColor: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1' }
+                                }
+                              >
+                                {t.feita ? 'Concluída' : atrasada ? 'Atrasada' : 'Pendente'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/* Rodapé */}
+            <footer className="mt-10 pt-4 border-t-2 border-slate-900 text-xs text-slate-500 flex items-center justify-between gap-3 flex-wrap">
+              <span>Documento interno — Controle Contábil.</span>
+              <span>Gerado em {new Date().toLocaleString('pt-BR')}.</span>
+            </footer>
+          </div>
         </div>
       </div>
     </div>
