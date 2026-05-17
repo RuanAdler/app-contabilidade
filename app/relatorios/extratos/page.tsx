@@ -116,11 +116,12 @@ function RelatorioExtratos() {
       for (const empresa of empresas) {
         const bancosEmp = bancos.filter((b) => b.empresa_id === empresa.id);
         if (bancosEmp.length === 0) {
-          if (statusFiltro === 'todos' || statusFiltro === 'pendente') {
+          // Empresa sem bancos: cria uma linha "marcadora" sem banco/extrato
+          if (statusFiltro === 'todos') {
             linhasGeradas.push({
               empresa,
               analista_nome: mapaAnalistas[empresa.analista_id] || '—',
-              banco: { id: '', empresa_id: empresa.id, nome_banco: '— Sem bancos cadastrados —', created_at: '' },
+              banco: { id: '__sem_bancos__', empresa_id: empresa.id, nome_banco: '', created_at: '' },
               extrato: null,
             });
           }
@@ -154,9 +155,11 @@ function RelatorioExtratos() {
 
   if (!autorizado) return null;
 
-  const totalLinhas = linhas.length;
-  const recebidos = linhas.filter((l) => l.extrato?.status === 'recebido' || l.extrato?.status === 'importado').length;
-  const solicitados = linhas.filter((l) => l.extrato?.status === 'solicitado').length;
+  const linhasComBanco = linhas.filter((l) => l.banco.id !== '__sem_bancos__');
+  const semBancosCount = linhas.length - linhasComBanco.length;
+  const totalLinhas = linhasComBanco.length;
+  const recebidos = linhasComBanco.filter((l) => l.extrato?.status === 'recebido' || l.extrato?.status === 'importado').length;
+  const solicitados = linhasComBanco.filter((l) => l.extrato?.status === 'solicitado').length;
   const pendentes = totalLinhas - recebidos - solicitados;
   const percentRecebidos = totalLinhas > 0 ? Math.round((recebidos / totalLinhas) * 100) : 0;
 
@@ -229,6 +232,9 @@ function RelatorioExtratos() {
               </h1>
               <p className="mt-1 text-sm text-slate-600">
                 {empresasNoRelatorio.length} empresa{empresasNoRelatorio.length === 1 ? '' : 's'} · {totalLinhas} registro{totalLinhas === 1 ? '' : 's'} de banco
+                {semBancosCount > 0 && (
+                  <> · <span className="text-slate-500">{semBancosCount} sem banco cadastrado</span></>
+                )}
               </p>
             </header>
 
@@ -408,6 +414,18 @@ function RelatorioExtratos() {
                               </td>
                             </tr>
                             {linhasDaEmpresa.map((l, idx) => {
+                              if (l.banco.id === '__sem_bancos__') {
+                                return (
+                                  <tr key={`${empInfo.empresa.id}-sem`}>
+                                    <td
+                                      colSpan={4}
+                                      className="px-3 py-2 border-t border-slate-100 text-slate-400 italic text-xs pl-6"
+                                    >
+                                      Sem bancos cadastrados para esta empresa.
+                                    </td>
+                                  </tr>
+                                );
+                              }
                               const status = l.extrato?.status || 'pendente';
                               const ehZebra = idx % 2 === 1;
                               return (
