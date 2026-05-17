@@ -172,11 +172,14 @@ function RelatorioAnalista() {
 
   // Stats do mês escolhido
   const concluidos = empresas.filter((e) => percentualBalanco(e.id, competencia) === 100).length;
-  const emAndamento = empresas.filter((e) => {
+  const empresasEmAndamento = empresas.filter((e) => {
     const p = percentualBalanco(e.id, competencia);
     return p > 0 && p < 100;
-  }).length;
-  const naoIniciados = empresas.length - concluidos - emAndamento;
+  });
+  const emAndamento = empresasEmAndamento.length;
+  const empresasConcluidas = empresas.filter((e) => percentualBalanco(e.id, competencia) === 100);
+  const empresasNaoIniciadas = empresas.filter((e) => percentualBalanco(e.id, competencia) === 0);
+  const naoIniciados = empresasNaoIniciadas.length;
   const percentConcluidos = empresas.length > 0 ? Math.round((concluidos / empresas.length) * 100) : 0;
 
   // Extratos do mês
@@ -426,6 +429,88 @@ function RelatorioAnalista() {
                 ))}
               </div>
             </section>
+
+            {/* Empresas da carteira agrupadas por status */}
+            {empresas.length > 0 && (
+              <section className="mb-7 print-avoid-break">
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-3">
+                  Empresas da carteira por status
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Concluídos */}
+                  <div className="border rounded overflow-hidden" style={{ borderColor: '#6ee7b7' }}>
+                    <div className="px-3 py-2 flex items-baseline justify-between" style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Concluídos</span>
+                      <span className="text-sm font-bold">{empresasConcluidas.length}</span>
+                    </div>
+                    {empresasConcluidas.length === 0 ? (
+                      <p className="px-3 py-2 text-[11px] text-slate-400 italic">Nenhuma.</p>
+                    ) : (
+                      <ul className="px-3 py-2 space-y-0.5">
+                        {empresasConcluidas.map((e) => (
+                          <li key={e.id} className="text-[11px] text-slate-700 leading-tight flex items-baseline gap-1">
+                            <span style={{ color: '#10b981' }}>•</span>
+                            <span className="break-words">
+                              {e.nome}
+                              {e.nao_envia_extratos && <span className="ml-1 text-amber-700" title="Não envia extratos">⚑</span>}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Em andamento */}
+                  <div className="border rounded overflow-hidden" style={{ borderColor: '#fcd34d' }}>
+                    <div className="px-3 py-2 flex items-baseline justify-between" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Em andamento</span>
+                      <span className="text-sm font-bold">{empresasEmAndamento.length}</span>
+                    </div>
+                    {empresasEmAndamento.length === 0 ? (
+                      <p className="px-3 py-2 text-[11px] text-slate-400 italic">Nenhuma.</p>
+                    ) : (
+                      <ul className="px-3 py-2 space-y-0.5">
+                        {empresasEmAndamento.map((e) => (
+                          <li key={e.id} className="text-[11px] text-slate-700 leading-tight flex items-baseline gap-1">
+                            <span style={{ color: '#f59e0b' }}>•</span>
+                            <span className="break-words">
+                              {e.nome}
+                              {e.nao_envia_extratos && <span className="ml-1 text-amber-700" title="Não envia extratos">⚑</span>}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Não iniciados */}
+                  <div className="border rounded overflow-hidden" style={{ borderColor: '#fca5a5' }}>
+                    <div className="px-3 py-2 flex items-baseline justify-between" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Não iniciados</span>
+                      <span className="text-sm font-bold">{empresasNaoIniciadas.length}</span>
+                    </div>
+                    {empresasNaoIniciadas.length === 0 ? (
+                      <p className="px-3 py-2 text-[11px] text-slate-400 italic">Nenhuma.</p>
+                    ) : (
+                      <ul className="px-3 py-2 space-y-0.5">
+                        {empresasNaoIniciadas.map((e) => (
+                          <li key={e.id} className="text-[11px] text-slate-700 leading-tight flex items-baseline gap-1">
+                            <span style={{ color: '#ef4444' }}>•</span>
+                            <span className="break-words">
+                              {e.nome}
+                              {e.nao_envia_extratos && <span className="ml-1 text-amber-700" title="Não envia extratos">⚑</span>}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-2 text-[10px] text-slate-500">
+                  <span className="text-amber-700">⚑</span> indica empresa marcada como "não envia extratos".
+                </p>
+              </section>
+            )}
 
             {/* Empresas em atenção */}
             <section className="mb-7 print-avoid-break">
