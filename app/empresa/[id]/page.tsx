@@ -32,6 +32,8 @@ export default function EmpresaDetail() {
   const [tarefas, setTarefas] = useState<TarefaEmpresa[]>([]);
   const [novaTarefa, setNovaTarefa] = useState({ titulo: '', descricao: '', prazo: '' });
   const [salvandoTarefa, setSalvandoTarefa] = useState(false);
+  const [obsEditandoId, setObsEditandoId] = useState<string | null>(null);
+  const [obsRascunho, setObsRascunho] = useState('');
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
   const [mes, setMes] = useState(String(hoje.getMonth() + 1).padStart(2, '0'));
@@ -127,6 +129,48 @@ export default function EmpresaDetail() {
         .single();
       if (data) setChecklist((prev) => [...prev, data]);
     }
+  };
+
+  const salvarObservacaoEtapa = async (etapaId: string, texto: string) => {
+    const valor = texto.trim() || null;
+    const existente = checklist.find((c) => c.etapa_id === etapaId);
+    if (existente) {
+      if ((existente.observacao || null) === valor) return;
+      const { data } = await supabase
+        .from('progresso_checklist')
+        .update({ observacao: valor })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (data) {
+        setChecklist((prev) => prev.map((c) => (c.id === existente.id ? data : c)));
+      }
+    } else if (valor) {
+      const { data } = await supabase
+        .from('progresso_checklist')
+        .insert({
+          empresa_id: empresaId,
+          etapa_id: etapaId,
+          competencia,
+          observacao: valor,
+        })
+        .select()
+        .single();
+      if (data) setChecklist((prev) => [...prev, data]);
+    }
+  };
+
+  const abrirEdicaoObs = (etapaId: string, textoAtual: string) => {
+    setObsEditandoId(etapaId);
+    setObsRascunho(textoAtual);
+  };
+
+  const fecharEdicaoObs = async () => {
+    if (obsEditandoId) {
+      await salvarObservacaoEtapa(obsEditandoId, obsRascunho);
+    }
+    setObsEditandoId(null);
+    setObsRascunho('');
   };
 
   const salvarObservacao = async () => {
@@ -417,28 +461,70 @@ export default function EmpresaDetail() {
                                 {lista.map((etapa) => {
                                   const progresso = progressoPorEtapa[etapa.id];
                                   const feito = !!progresso?.feito_em;
+                                  const observacao = progresso?.observacao || '';
+                                  const editando = obsEditandoId === etapa.id;
                                   return (
-                                    <li key={etapa.id}>
-                                      <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer group">
+                                    <li key={etapa.id} className="px-2 py-1.5 rounded hover:bg-slate-50 group">
+                                      <div className="flex items-center gap-2">
                                         <input
                                           type="checkbox"
+                                          id={`chk-${etapa.id}`}
                                           checked={feito}
                                           onChange={(e) => handleChecklistChange(etapa.id, e.target.checked)}
                                           className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
                                         />
-                                        <span
-                                          className={`text-sm flex-1 ${
+                                        <label
+                                          htmlFor={`chk-${etapa.id}`}
+                                          className={`text-sm flex-1 cursor-pointer ${
                                             feito ? 'text-slate-400 line-through' : 'text-slate-900'
                                           }`}
                                         >
                                           {etapa.nome}
-                                        </span>
-                                        {feito && progresso?.feito_em && (
+                                        </label>
+                                        {!editando && (
+                                          <button
+                                            type="button"
+                                            onClick={() => abrirEdicaoObs(etapa.id, observacao)}
+                                            title={observacao ? 'Editar observação' : 'Adicionar observação'}
+                                            className={`text-slate-300 hover:text-slate-700 transition ${
+                                              observacao ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                            }`}
+                                          >
+                                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                          </button>
+                                        )}
+                                        {feito && progresso?.feito_em && !editando && (
                                           <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition">
                                             {new Date(progresso.feito_em).toLocaleDateString('pt-BR')}
                                           </span>
                                         )}
-                                      </label>
+                                      </div>
+                                      {editando ? (
+                                        <div className="mt-1 ml-6">
+                                          <textarea
+                                            value={obsRascunho}
+                                            onChange={(e) => setObsRascunho(e.target.value)}
+                                            onBlur={fecharEdicaoObs}
+                                            autoFocus
+                                            rows={2}
+                                            placeholder="Ex: falta conciliar PIS, IRPJ ainda não conferido..."
+                                            className="w-full px-2 py-1 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
+                                          />
+                                          <p className="text-[10px] text-slate-400 mt-0.5">
+                                            Clique fora para salvar.
+                                          </p>
+                                        </div>
+                                      ) : observacao ? (
+                                        <p
+                                          className="mt-0.5 ml-6 text-[11px] text-amber-700 italic cursor-pointer hover:underline"
+                                          onClick={() => abrirEdicaoObs(etapa.id, observacao)}
+                                          title="Clique para editar"
+                                        >
+                                          ↳ {observacao}
+                                        </p>
+                                      ) : null}
                                     </li>
                                   );
                                 })}
