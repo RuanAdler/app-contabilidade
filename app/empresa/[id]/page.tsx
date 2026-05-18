@@ -21,6 +21,8 @@ const SUBGRUPO_LABEL: Record<string, string> = {
   nao_circulante: 'Não circulante',
 };
 
+type AbaEmpresa = 'checklist' | 'observacoes';
+
 export default function EmpresaDetail() {
   const [usuario, setUsuario] = useState<any>(null);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
@@ -34,6 +36,10 @@ export default function EmpresaDetail() {
   const [salvandoTarefa, setSalvandoTarefa] = useState(false);
   const [obsEditandoId, setObsEditandoId] = useState<string | null>(null);
   const [obsRascunho, setObsRascunho] = useState('');
+  const [obsGeralTexto, setObsGeralTexto] = useState('');
+  const [salvandoObsGeral, setSalvandoObsGeral] = useState(false);
+  const [aba, setAba] = useState<AbaEmpresa>('checklist');
+  const [sidebarAberta, setSidebarAberta] = useState(true);
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
   const [mes, setMes] = useState(String(hoje.getMonth() + 1).padStart(2, '0'));
@@ -75,10 +81,26 @@ export default function EmpresaDetail() {
         .eq('id', empresaId)
         .single();
       setEmpresa(empresaData);
+      setObsGeralTexto(empresaData?.observacao_geral || '');
       setLoading(false);
     };
     loadData();
   }, [router, empresaId]);
+
+  const salvarObservacaoGeral = async () => {
+    if (!empresa) return;
+    if (obsGeralTexto === (empresa.observacao_geral || '')) return;
+    setSalvandoObsGeral(true);
+    const valor = obsGeralTexto.trim() || null;
+    const { data } = await supabase
+      .from('empresas')
+      .update({ observacao_geral: valor })
+      .eq('id', empresaId)
+      .select()
+      .single();
+    if (data) setEmpresa(data);
+    setSalvandoObsGeral(false);
+  };
 
   useEffect(() => {
     const carregar = async () => {
@@ -306,10 +328,72 @@ export default function EmpresaDetail() {
   checklist.forEach((c) => { progressoPorEtapa[c.etapa_id] = c; });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar usuario={usuario} />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <div className="flex flex-1">
+        <aside
+          className={`bg-white border-r border-slate-200 transition-all duration-200 flex flex-col ${
+            sidebarAberta ? 'w-56' : 'w-14'
+          }`}
+        >
+          <div className="h-12 flex items-center justify-end px-2 border-b border-slate-200">
+            <button
+              onClick={() => setSidebarAberta(!sidebarAberta)}
+              className="h-8 w-8 inline-flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
+              title={sidebarAberta ? 'Ocultar menu' : 'Mostrar menu'}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {sidebarAberta ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                )}
+              </svg>
+            </button>
+          </div>
+          <nav className="flex-1 py-2">
+            {[
+              {
+                id: 'checklist' as AbaEmpresa,
+                label: 'Checklist',
+                icone: (
+                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                ),
+              },
+              {
+                id: 'observacoes' as AbaEmpresa,
+                label: 'Observações',
+                icone: (
+                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                ),
+              },
+            ].map((item) => {
+              const ativo = aba === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setAba(item.id)}
+                  title={!sidebarAberta ? item.label : undefined}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition border-l-2 ${
+                    ativo
+                      ? 'border-slate-900 bg-slate-50 text-slate-900 font-medium'
+                      : 'border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  } ${!sidebarAberta && 'justify-center px-0'}`}
+                >
+                  {item.icone}
+                  {sidebarAberta && <span className="truncate">{item.label}</span>}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+      <main className="flex-1 max-w-6xl mx-auto px-6 py-8 min-w-0">
         <button
           onClick={() => router.back()}
           className="mb-6 text-xs font-medium text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
@@ -324,7 +408,7 @@ export default function EmpresaDetail() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                Empresa · Checklist do balanço
+                Empresa
               </p>
               <h1 className="mt-1 text-2xl font-semibold text-slate-900">{empresa.nome}</h1>
               <p className="mt-1 text-sm text-slate-500">
@@ -408,6 +492,7 @@ export default function EmpresaDetail() {
           </div>
         </div>
 
+        {aba === 'checklist' && (
         <div className="space-y-6">
           {/* Checklist */}
           <section className="bg-white border border-slate-200 rounded-md shadow-sm">
@@ -705,7 +790,69 @@ export default function EmpresaDetail() {
             </div>
           </section>
         </div>
+        )}
+
+        {aba === 'observacoes' && (
+          <div className="space-y-6">
+            {/* Observação geral */}
+            <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+              <header className="px-5 py-4 border-b border-slate-200">
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                  Observação geral da empresa
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Notas permanentes sobre esta empresa, não vinculadas a um mês específico (contato preferencial, particularidades fiscais, contexto de negócio, etc.).
+                </p>
+              </header>
+              <div className="p-5">
+                <textarea
+                  value={obsGeralTexto}
+                  onChange={(e) => setObsGeralTexto(e.target.value)}
+                  onBlur={salvarObservacaoGeral}
+                  placeholder="Ex: Cliente prefere contato por WhatsApp. Possui 2 filiais que ainda não foram cadastradas. Pagamentos atrasam frequentemente..."
+                  rows={8}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
+                />
+                <div className="mt-2 text-xs text-slate-500">
+                  {salvandoObsGeral ? 'Salvando...' : 'Salva automaticamente ao sair do campo.'}
+                </div>
+              </div>
+            </section>
+
+            {/* Observação do mês — espelhada com a aba checklist */}
+            <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+              <header className="px-5 py-4 border-b border-slate-200">
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                  Observação do mês · {competencia}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Específica para esta competência. Também aparece no fim da aba <strong>Checklist</strong>.
+                </p>
+              </header>
+              <div className="p-5">
+                <textarea
+                  value={obsTexto}
+                  onChange={(e) => setObsTexto(e.target.value)}
+                  onBlur={salvarObservacao}
+                  placeholder="Escreva aqui qualquer observação relevante sobre o trabalho desta empresa neste mês..."
+                  rows={6}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
+                />
+                <div className="mt-2 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-500">
+                  <span>
+                    {salvandoObs
+                      ? 'Salvando...'
+                      : observacao
+                      ? `Última atualização: ${new Date(observacao.updated_at).toLocaleString('pt-BR')}${observacao.updated_by ? ` por ${observacao.updated_by}` : ''}`
+                      : 'Sem observações registradas para esta competência.'}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
       </main>
+      </div>
     </div>
   );
 }

@@ -18,6 +18,7 @@ export interface Empresa {
   nao_envia_extratos: boolean;
   marcado_em: string | null;
   status: StatusEmpresa;
+  observacao_geral: string | null;
 }
 
 export interface BancoEmpresa {
