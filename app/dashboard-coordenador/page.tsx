@@ -5,7 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp } from '@/lib/types';
+import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, SessaoTrabalho } from '@/lib/types';
+
+function formatarDuracao(segundos: number): string {
+  if (!segundos || segundos < 0) return '0min';
+  const h = Math.floor(segundos / 3600);
+  const m = Math.floor((segundos % 3600) / 60);
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}min`;
+}
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
@@ -66,6 +75,8 @@ export default function DashboardCoordenador() {
   const [analistaDetalhado, setAnalistaDetalhado] = useState<string | null>(null);
   const [pedidosHelp, setPedidosHelp] = useState<PedidoHelp[]>([]);
   const [solucaoRascunho, setSolucaoRascunho] = useState<Record<string, string>>({});
+  const [sessoesMes, setSessoesMes] = useState<SessaoTrabalho[]>([]);
+  const [tickAgora, setTickAgora] = useState(Date.now());
 
   // Filtros dos relatórios
   const [relExtrCompetencia, setRelExtrCompetencia] = useState(COMPETENCIA_ATUAL);
@@ -170,6 +181,12 @@ export default function DashboardCoordenador() {
         .select('*')
         .order('created_at', { ascending: false });
       setPedidosHelp(helpData || []);
+
+      const { data: sessoesData } = await supabase
+        .from('sessoes_trabalho')
+        .select('*')
+        .eq('competencia', COMPETENCIA_ATUAL);
+      setSessoesMes(sessoesData || []);
 
       setLoading(false);
     };
@@ -388,6 +405,53 @@ export default function DashboardCoordenador() {
   const totalBaixadas = empresas.filter((e) => e.status === 'baixada').length;
   const totalSuspensas = empresas.filter((e) => e.status === 'suspensa').length;
   const totalNaoEnvia = empresasAtivas.filter((e) => e.nao_envia_extratos).length;
+
+  // ====== Sessões de trabalho ======
+  useEffect(() => {
+    const algumaAberta = sessoesMes.some((s) => !s.fim_em);
+    if (!algumaAberta) return;
+    const interval = setInterval(() => setTickAgora(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [sessoesMes]);
+
+  const tempoEmpresaMes = (empresaId: string): number => {
+    const sessoesEmp = sessoesMes.filter((s) => s.empresa_id === empresaId);
+    let total = 0;
+    for (const s of sessoesEmp) {
+      if (s.fim_em) {
+        total += s.duracao_segundos || 0;
+      } else {
+        total += Math.max(0, Math.floor((tickAgora - new Date(s.inicio_em).getTime()) / 1000));
+      }
+    }
+    return total;
+  };
+
+  const tempoAnalistaMes = (analistaEmail: string): number => {
+    const sessoesAna = sessoesMes.filter((s) => s.analista_email === analistaEmail);
+    let total = 0;
+    for (const s of sessoesAna) {
+      if (s.fim_em) {
+        total += s.duracao_segundos || 0;
+      } else {
+        total += Math.max(0, Math.floor((tickAgora - new Date(s.inicio_em).getTime()) / 1000));
+      }
+    }
+    return total;
+  };
+
+  const tempoTotalEquipe = useMemo(
+    () => analistas.reduce((sum, a) => sum + tempoAnalistaMes(a.email), 0),
+    [analistas, sessoesMes, tickAgora]
+  );
+
+  const topEmpresasTempo = useMemo(() => {
+    return empresasAtivas
+      .map((emp) => ({ empresa: emp, segundos: tempoEmpresaMes(emp.id) }))
+      .filter((x) => x.segundos > 0)
+      .sort((a, b) => b.segundos - a.segundos)
+      .slice(0, 10);
+  }, [empresasAtivas, sessoesMes, tickAgora]);
 
   // ====== Helps ======
   const HORAS_24 = 24 * 60 * 60 * 1000;
@@ -682,7 +746,7 @@ export default function DashboardCoordenador() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
                     Empresas ativas
@@ -691,13 +755,13 @@ export default function DashboardCoordenador() {
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                    Analistas ativos
+                    Analistas
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">{analistas.length}</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                    Média por analista
+                    Média/analista
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">
                     {analistas.length > 0 ? Math.round(totalAtivas / analistas.length) : 0}
@@ -705,7 +769,15 @@ export default function DashboardCoordenador() {
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                    Não envia extratos
+                    Tempo da equipe
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums">
+                    {formatarDuracao(tempoTotalEquipe)}
+                  </p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-md p-4">
+                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                    Não envia
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-amber-700">{totalNaoEnvia}</p>
                 </div>
@@ -760,6 +832,14 @@ export default function DashboardCoordenador() {
                           <p className="text-sm font-semibold text-slate-500">{s.naoEnvia}</p>
                           <p className="text-[10px] text-slate-500 uppercase tracking-wider">N/Env.</p>
                         </div>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 uppercase tracking-wider">
+                          Tempo no mês
+                        </span>
+                        <span className="font-mono font-semibold text-slate-700 tabular-nums">
+                          {formatarDuracao(tempoAnalistaMes(s.analista.email))}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -836,6 +916,73 @@ export default function DashboardCoordenador() {
                   </div>
                 )}
               </section>
+
+              {topEmpresasTempo.length > 0 && (
+                <section className="mb-8">
+                  <header className="mb-3 flex items-baseline justify-between">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                        Empresas com mais tempo investido · {NOME_MES}
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Top 10 empresas que mais demandaram tempo da equipe.
+                      </p>
+                    </div>
+                  </header>
+                  <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600 w-8">#</th>
+                          <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Empresa</th>
+                          <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Analista</th>
+                          <th className="text-right px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Tempo</th>
+                          <th className="px-4 py-2.5 w-20"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topEmpresasTempo.map((item, idx) => {
+                          const maxSegundos = topEmpresasTempo[0].segundos;
+                          const proporcao = maxSegundos > 0 ? (item.segundos / maxSegundos) * 100 : 0;
+                          return (
+                            <tr
+                              key={item.empresa.id}
+                              className={`border-b border-slate-100 hover:bg-slate-50 ${
+                                idx === topEmpresasTempo.length - 1 ? 'border-b-0' : ''
+                              }`}
+                            >
+                              <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{idx + 1}</td>
+                              <td className="px-4 py-2.5 text-slate-900 font-medium">{item.empresa.nome}</td>
+                              <td className="px-4 py-2.5 text-slate-600 text-xs">{item.empresa.analista_nome}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2 justify-end">
+                                  <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-slate-700"
+                                      style={{ width: `${proporcao}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-mono font-semibold text-slate-900 tabular-nums text-xs min-w-[60px] text-right">
+                                    {formatarDuracao(item.segundos)}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                <Link
+                                  href={`/empresa/${item.empresa.id}`}
+                                  className="text-xs font-medium text-slate-700 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded px-2.5 py-1 transition"
+                                >
+                                  Abrir
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
 
               <section>
                 <header className="mb-3">
