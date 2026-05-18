@@ -8,6 +8,20 @@ import { Empresa, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, EtapaChe
 
 type StatusExtrato = 'pendente' | 'solicitado' | 'recebido' | 'importado';
 
+const STATUS_LABELS: Record<StatusExtrato, string> = {
+  pendente: 'Pendente',
+  solicitado: 'Solicitado',
+  recebido: 'Recebido',
+  importado: 'Importado',
+};
+
+const STATUS_BADGE_CLASS: Record<StatusExtrato, string> = {
+  pendente: 'bg-slate-100 text-slate-700 border-slate-300',
+  solicitado: 'bg-amber-50 text-amber-800 border-amber-300',
+  recebido: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  importado: 'bg-slate-900 text-white border-slate-900',
+};
+
 const GRUPO_LABEL: Record<GrupoChecklist, string> = {
   ativo: 'Ativo',
   passivo: 'Passivo',
@@ -141,6 +155,85 @@ export default function EmpresaDetail() {
     if (recebidos === 0) return 'pendente';
     if (recebidos === bancos.length) return 'concluido';
     return 'parcial';
+  };
+
+  const handleStatusChange = async (bancoId: string, novoStatus: StatusExtrato) => {
+    const existente = extratosAno.find(
+      (e) => e.banco_id === bancoId && e.competencia === competencia
+    );
+    const agora = new Date().toISOString();
+    if (existente) {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .update({ status: novoStatus, updated_at: agora })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (data) setExtratosAno((prev) => prev.map((e) => (e.id === existente.id ? data : e)));
+    } else {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .insert({ banco_id: bancoId, competencia, status: novoStatus })
+        .select()
+        .single();
+      if (data) setExtratosAno((prev) => [...prev, data]);
+    }
+  };
+
+  const handleRegistrarSolicitacao = async (bancoId: string) => {
+    const existente = extratosAno.find(
+      (e) => e.banco_id === bancoId && e.competencia === competencia
+    );
+    const agora = new Date().toISOString();
+    let registro: SolicitacaoExtrato | null = null;
+    if (existente) {
+      if (existente.status === 'recebido' || existente.status === 'importado') return;
+      const novaQtd = (existente.qtd_solicitacoes || 0) + 1;
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .update({
+          qtd_solicitacoes: novaQtd,
+          ultima_solicitacao_em: agora,
+          status: 'solicitado',
+          updated_at: agora,
+        })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      registro = data;
+      if (data) {
+        setExtratosAno((prev) => prev.map((e) => (e.id === existente.id ? data : e)));
+      }
+    } else {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .insert({
+          banco_id: bancoId,
+          competencia,
+          status: 'solicitado',
+          qtd_solicitacoes: 1,
+          ultima_solicitacao_em: agora,
+        })
+        .select()
+        .single();
+      registro = data;
+      if (data) setExtratosAno((prev) => [...prev, data]);
+    }
+
+    // Regra automática: 3+ solicitações + 2 dias parado sem retorno
+    if (
+      registro &&
+      empresa &&
+      !empresa.nao_envia_extratos &&
+      registro.qtd_solicitacoes >= 3 &&
+      (registro.status === 'pendente' || registro.status === 'solicitado')
+    ) {
+      const primeiraSolicitacao = new Date(registro.created_at).getTime();
+      const diasDecorridos = (Date.now() - primeiraSolicitacao) / (1000 * 60 * 60 * 24);
+      if (diasDecorridos >= 2) {
+        await marcarComoNaoEnvia(true);
+      }
+    }
   };
 
   const marcarComoNaoEnvia = async (marcar: boolean) => {
@@ -484,13 +577,13 @@ export default function EmpresaDetail() {
           </div>
 
           <section className="bg-white border border-slate-200 rounded-md shadow-sm mb-6">
-            <header className="px-5 py-3 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+            <header className="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                  Bancos cadastrados
+                  Extratos bancários
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Para registrar cobranças e alterar status dos extratos, use o menu lateral &rarr; <strong>Extratos</strong>.
+                  Cadastre bancos, atualize status e registre cobranças por banco para {competencia}.
                 </p>
               </div>
               <form onSubmit={handleAddBanco} className="flex items-center gap-2">
@@ -506,33 +599,100 @@ export default function EmpresaDetail() {
                   disabled={adicionandoBanco || !novoBanco.trim()}
                   className="text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 px-3 py-1.5 rounded-md transition"
                 >
-                  {adicionandoBanco ? 'Adicionando...' : '+ Adicionar'}
+                  {adicionandoBanco ? 'Adicionando...' : '+ Cadastrar banco'}
                 </button>
               </form>
             </header>
 
             {bancos.length === 0 ? (
-              <div className="p-5 text-center">
+              <div className="p-8 text-center">
                 <p className="text-sm text-slate-500">Nenhum banco cadastrado.</p>
-                <p className="text-xs text-slate-400 mt-1">Adicione bancos para começar a controlar extratos.</p>
+                <p className="text-xs text-slate-400 mt-1">Use o campo acima para adicionar o primeiro banco.</p>
               </div>
             ) : (
-              <ul className="divide-y divide-slate-100">
-                {bancos.map((banco) => (
-                  <li key={banco.id} className="px-5 py-2 flex items-center justify-between gap-2 group">
-                    <span className="text-sm text-slate-800">{banco.nome_banco}</span>
-                    <button
-                      onClick={() => handleRemoveBanco(banco.id, banco.nome_banco)}
-                      title="Remover banco"
-                      className="text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition"
-                    >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
-                      </svg>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Banco</th>
+                    <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Status</th>
+                    <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Cobranças</th>
+                    <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Alterar</th>
+                    <th className="px-5 py-2.5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bancos.map((banco, idx) => {
+                    const status = statusDoBanco(banco.id);
+                    const registro = extratosAno.find(
+                      (e) => e.banco_id === banco.id && e.competencia === competencia
+                    );
+                    const qtd = registro?.qtd_solicitacoes || 0;
+                    const ultima = registro?.ultima_solicitacao_em;
+                    const recebido = status === 'recebido' || status === 'importado';
+                    return (
+                      <tr
+                        key={banco.id}
+                        className={`border-b border-slate-100 ${
+                          idx === bancos.length - 1 ? 'border-b-0' : ''
+                        }`}
+                      >
+                        <td className="px-5 py-3 text-slate-900 font-medium align-top">
+                          {banco.nome_banco}
+                        </td>
+                        <td className="px-5 py-3 align-top">
+                          <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${STATUS_BADGE_CLASS[status]}`}>
+                            {STATUS_LABELS[status]}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 align-top">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs font-medium ${qtd >= 3 ? 'text-amber-700' : 'text-slate-600'}`}>
+                              {qtd === 0 ? 'Nenhuma' : `${qtd}×`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRegistrarSolicitacao(banco.id)}
+                              disabled={recebido}
+                              title={recebido ? 'Extrato já recebido' : 'Registrar nova solicitação'}
+                              className="text-xs font-medium px-2 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-700 disabled:hover:border-slate-300 transition"
+                            >
+                              + Cobrar
+                            </button>
+                          </div>
+                          {ultima && (
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Última: {new Date(ultima).toLocaleDateString('pt-BR')}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 align-top">
+                          <select
+                            value={status}
+                            onChange={(e) => handleStatusChange(banco.id, e.target.value as StatusExtrato)}
+                            className="px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          >
+                            <option value="pendente">Pendente</option>
+                            <option value="solicitado">Solicitado</option>
+                            <option value="recebido">Recebido</option>
+                            <option value="importado">Importado</option>
+                          </select>
+                        </td>
+                        <td className="px-5 py-3 text-right align-top">
+                          <button
+                            onClick={() => handleRemoveBanco(banco.id, banco.nome_banco)}
+                            title="Excluir banco"
+                            className="text-slate-400 hover:text-red-600 transition"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </section>
 

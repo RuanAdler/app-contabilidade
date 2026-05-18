@@ -400,6 +400,13 @@ export default function DashboardAnalista() {
     await registrarCobrancaBanco(bancoId);
   };
 
+  const handleAplicarStatusEmTodos = async (empresaId: string, novoStatus: StatusExtrato) => {
+    const bs = bancosPorEmpresa[empresaId] || [];
+    for (const b of bs) {
+      await handleStatusExtrato(b.id, novoStatus);
+    }
+  };
+
   const handleCobrarTodosDaEmpresa = async (empresaId: string) => {
     const bs = bancosPorEmpresa[empresaId] || [];
     const pendentes = bs.filter((b) => {
@@ -1216,27 +1223,57 @@ export default function DashboardAnalista() {
                   }
 
                   return (
-                    <ul className="divide-y divide-slate-100">
-                      {empresasFiltradasExt.map((emp) => {
-                        const bs = bancosPorEmpresa[emp.id] || [];
-                        const s = statusGeralEmpresa(emp.id);
-                        const temPendente = bs.some((b) => {
-                          const e = extratoPorBanco[b.id];
-                          return !e || (e.status !== 'recebido' && e.status !== 'importado');
-                        });
-                        return (
-                          <li key={emp.id} className="p-4">
-                            <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-                              <div className="min-w-0 flex-1">
-                                <Link
-                                  href={`/empresa/${emp.id}`}
-                                  className="text-sm font-semibold text-slate-900 hover:underline"
-                                >
-                                  {emp.nome}
-                                </Link>
-                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Empresa</th>
+                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Status</th>
+                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Cobranças</th>
+                            <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Ações rápidas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {empresasFiltradasExt.map((emp, idx) => {
+                            const bs = bancosPorEmpresa[emp.id] || [];
+                            const s = statusGeralEmpresa(emp.id);
+                            const temPendente = bs.some((b) => {
+                              const e = extratoPorBanco[b.id];
+                              return !e || (e.status !== 'recebido' && e.status !== 'importado');
+                            });
+                            const totalCobrancas = bs.reduce((sum, b) => {
+                              const e = extratoPorBanco[b.id];
+                              return sum + (e?.qtd_solicitacoes || 0);
+                            }, 0);
+                            const statusesDistintos = new Set(
+                              bs.map((b) => extratoPorBanco[b.id]?.status || 'pendente')
+                            );
+                            const statusUnico = statusesDistintos.size === 1
+                              ? (Array.from(statusesDistintos)[0] as StatusExtrato)
+                              : null;
+                            return (
+                              <tr
+                                key={emp.id}
+                                className={`border-b border-slate-100 hover:bg-slate-50 ${
+                                  idx === empresasFiltradasExt.length - 1 ? 'border-b-0' : ''
+                                }`}
+                              >
+                                <td className="px-4 py-3 align-middle">
+                                  <Link
+                                    href={`/empresa/${emp.id}`}
+                                    className="text-slate-900 font-medium hover:underline"
+                                  >
+                                    {emp.nome}
+                                  </Link>
+                                  {emp.status === 'suspensa' && (
+                                    <span className="ml-2 inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                                      Suspensa
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 align-middle">
                                   {s.classe === 'sem_bancos' ? (
-                                    <span className="text-[11px] text-slate-400 italic">Sem bancos cadastrados</span>
+                                    <span className="text-[11px] text-slate-400 italic">Sem bancos</span>
                                   ) : (
                                     <span
                                       className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${
@@ -1250,83 +1287,58 @@ export default function DashboardAnalista() {
                                       {s.recebidos}/{s.total} recebidos
                                     </span>
                                   )}
-                                  {emp.status === 'suspensa' && (
-                                    <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
-                                      Suspensa
+                                </td>
+                                <td className="px-4 py-3 align-middle text-slate-700 text-sm">
+                                  {totalCobrancas > 0 ? (
+                                    <span className={totalCobrancas >= 3 * Math.max(bs.length, 1) ? 'text-amber-700 font-medium' : ''}>
+                                      {totalCobrancas}×
                                     </span>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
                                   )}
-                                </div>
-                              </div>
-                              {temPendente && bs.length > 0 && (
-                                <button
-                                  onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
-                                  className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
-                                >
-                                  + Cobrar todos pendentes
-                                </button>
-                              )}
-                            </div>
-
-                            {bs.length > 0 && (
-                              <table className="w-full text-sm">
-                                <tbody>
-                                  {bs.map((b) => {
-                                    const e = extratoPorBanco[b.id];
-                                    const status = (e?.status || 'pendente') as StatusExtrato;
-                                    const recebido = status === 'recebido' || status === 'importado';
-                                    const qtd = e?.qtd_solicitacoes || 0;
-                                    return (
-                                      <tr key={b.id} className="border-t border-slate-100">
-                                        <td className="py-2 pl-6 pr-2 text-slate-700 text-sm">
-                                          {b.nome_banco}
-                                        </td>
-                                        <td className="py-2 px-2">
-                                          <span
-                                            className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${STATUS_EXT_CLASS[status]}`}
-                                          >
-                                            {STATUS_EXT_LABEL[status]}
-                                          </span>
-                                        </td>
-                                        <td className="py-2 px-2 text-[11px] text-slate-500">
-                                          {qtd > 0 ? `${qtd}× cobrado` : '—'}
-                                          {e?.ultima_solicitacao_em && (
-                                            <span className="ml-1">
-                                              · {new Date(e.ultima_solicitacao_em).toLocaleDateString('pt-BR')}
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td className="py-2 pl-2 text-right whitespace-nowrap">
-                                          <div className="inline-flex items-center gap-1.5">
-                                            <select
-                                              value={status}
-                                              onChange={(ev) => handleStatusExtrato(b.id, ev.target.value as StatusExtrato)}
-                                              className="px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-                                            >
-                                              <option value="pendente">Pendente</option>
-                                              <option value="solicitado">Solicitado</option>
-                                              <option value="recebido">Recebido</option>
-                                              <option value="importado">Importado</option>
-                                            </select>
-                                            <button
-                                              onClick={() => handleRegistrarCobranca(b.id)}
-                                              disabled={recebido}
-                                              title={recebido ? 'Já recebido' : 'Registrar cobrança'}
-                                              className="text-xs font-medium px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-700 disabled:hover:border-slate-300 transition"
-                                            >
-                                              + Cobrar
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
+                                </td>
+                                <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
+                                  <div className="inline-flex items-center gap-2 flex-wrap justify-end">
+                                    {bs.length > 0 && (
+                                      <select
+                                        value={statusUnico || ''}
+                                        onChange={(ev) => handleAplicarStatusEmTodos(emp.id, ev.target.value as StatusExtrato)}
+                                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                        title="Aplica o status escolhido a todos os bancos da empresa"
+                                      >
+                                        <option value="" disabled>
+                                          {statusUnico ? STATUS_EXT_LABEL[statusUnico] : 'Vários status'}
+                                        </option>
+                                        <option value="pendente">Marcar todos: Pendente</option>
+                                        <option value="solicitado">Marcar todos: Solicitado</option>
+                                        <option value="recebido">Marcar todos: Recebido</option>
+                                        <option value="importado">Marcar todos: Importado</option>
+                                      </select>
+                                    )}
+                                    {temPendente && bs.length > 0 && (
+                                      <button
+                                        onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
+                                        className="text-xs font-medium px-2.5 py-1 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
+                                        title="Registra cobrança em todos os bancos pendentes"
+                                      >
+                                        + Cobrar pendentes
+                                      </button>
+                                    )}
+                                    <Link
+                                      href={`/empresa/${emp.id}`}
+                                      className="text-xs font-medium px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+                                      title="Ver detalhes e gerenciar bancos"
+                                    >
+                                      Detalhes
+                                    </Link>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   );
                 })()}
               </div>
