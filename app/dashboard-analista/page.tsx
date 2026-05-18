@@ -5,12 +5,35 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, ProgressoChecklist, TarefaEmpresa, PedidoHelp } from '@/lib/types';
+import { Empresa, ProgressoChecklist, TarefaEmpresa, PedidoHelp, BancoEmpresa, SolicitacaoExtrato } from '@/lib/types';
 
 type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroBalanco = 'todos' | 'nao_iniciado' | 'em_andamento' | 'concluido' | 'atrasado';
 type StatusBalanco = 'nao_iniciado' | 'em_andamento' | 'concluido' | 'atrasado';
-type Aba = 'pendencias' | 'empresas' | 'help';
+type StatusExtrato = 'pendente' | 'solicitado' | 'recebido' | 'importado';
+type FiltroExtrato = 'todos' | 'pendentes' | 'parciais' | 'completos';
+type Aba = 'pendencias' | 'empresas' | 'help' | 'extratos';
+
+const STATUS_EXT_LABEL: Record<StatusExtrato, string> = {
+  pendente: 'Pendente',
+  solicitado: 'Solicitado',
+  recebido: 'Recebido',
+  importado: 'Importado',
+};
+
+const STATUS_EXT_CLASS: Record<StatusExtrato, string> = {
+  pendente: 'bg-slate-100 text-slate-700 border-slate-300',
+  solicitado: 'bg-amber-50 text-amber-800 border-amber-300',
+  recebido: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  importado: 'bg-slate-900 text-white border-slate-900',
+};
+
+const MESES = [
+  { num: '01', label: 'Jan' }, { num: '02', label: 'Fev' }, { num: '03', label: 'Mar' },
+  { num: '04', label: 'Abr' }, { num: '05', label: 'Mai' }, { num: '06', label: 'Jun' },
+  { num: '07', label: 'Jul' }, { num: '08', label: 'Ago' }, { num: '09', label: 'Set' },
+  { num: '10', label: 'Out' }, { num: '11', label: 'Nov' }, { num: '12', label: 'Dez' },
+];
 
 const hoje = new Date();
 const COMPETENCIA_ATUAL = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
@@ -56,6 +79,14 @@ export default function DashboardAnalista() {
   const [helpDropdownAberto, setHelpDropdownAberto] = useState(false);
   const [helpMensagem, setHelpMensagem] = useState('');
   const [enviandoHelp, setEnviandoHelp] = useState(false);
+
+  // Extratos
+  const [bancos, setBancos] = useState<BancoEmpresa[]>([]);
+  const [extratos, setExtratos] = useState<SolicitacaoExtrato[]>([]);
+  const [extrAno, setExtrAno] = useState(String(hoje.getFullYear()));
+  const [extrMes, setExtrMes] = useState(String(hoje.getMonth() + 1).padStart(2, '0'));
+  const [extrBusca, setExtrBusca] = useState('');
+  const [extrFiltro, setExtrFiltro] = useState<FiltroExtrato>('todos');
   const router = useRouter();
 
   useEffect(() => {
@@ -114,6 +145,17 @@ export default function DashboardAnalista() {
           .eq('analista_email', session.user.email)
           .order('created_at', { ascending: false });
         setPedidosHelp(helpData || []);
+
+        // Bancos das empresas do analista
+        if (lista.length > 0) {
+          const idsEmpresas = lista.map((e) => e.id);
+          const { data: bancosData } = await supabase
+            .from('bancos_empresa')
+            .select('*')
+            .in('empresa_id', idsEmpresas)
+            .order('nome_banco');
+          setBancos(bancosData || []);
+        }
       }
 
       setLoading(false);
@@ -127,6 +169,52 @@ export default function DashboardAnalista() {
     empresas.forEach((e) => { m[e.id] = e; });
     return m;
   }, [empresas]);
+
+  const extrCompetencia = `${extrAno}-${extrMes}`;
+
+  useEffect(() => {
+    const carregarExtratos = async () => {
+      if (bancos.length === 0) {
+        setExtratos([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .select('*')
+        .in('banco_id', bancos.map((b) => b.id))
+        .eq('competencia', extrCompetencia);
+      setExtratos(data || []);
+    };
+    carregarExtratos();
+  }, [bancos, extrCompetencia]);
+
+  const extratoPorBanco = useMemo(() => {
+    const m: Record<string, SolicitacaoExtrato> = {};
+    extratos.forEach((e) => { m[e.banco_id] = e; });
+    return m;
+  }, [extratos]);
+
+  const bancosPorEmpresa = useMemo(() => {
+    const m: Record<string, BancoEmpresa[]> = {};
+    bancos.forEach((b) => {
+      if (!m[b.empresa_id]) m[b.empresa_id] = [];
+      m[b.empresa_id].push(b);
+    });
+    return m;
+  }, [bancos]);
+
+  const statusGeralEmpresa = (empresaId: string) => {
+    const bs = bancosPorEmpresa[empresaId] || [];
+    if (bs.length === 0) return { recebidos: 0, total: 0, classe: 'sem_bancos' as const };
+    const recebidos = bs.filter((b) => {
+      const e = extratoPorBanco[b.id];
+      return e && (e.status === 'recebido' || e.status === 'importado');
+    }).length;
+    let classe: 'completo' | 'parcial' | 'pendente' = 'pendente';
+    if (recebidos === bs.length) classe = 'completo';
+    else if (recebidos > 0) classe = 'parcial';
+    return { recebidos, total: bs.length, classe };
+  };
 
   const statusBalancoDaEmpresa = (empresaId: string): StatusBalanco => {
     const temAtrasada = tarefasMes.some(
@@ -251,6 +339,79 @@ export default function DashboardAnalista() {
     if (data) setPedidosHelp((prev) => prev.map((p) => (p.id === id ? data : p)));
   };
 
+  const handleStatusExtrato = async (bancoId: string, novoStatus: StatusExtrato) => {
+    const existente = extratoPorBanco[bancoId];
+    const agora = new Date().toISOString();
+    if (existente) {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .update({ status: novoStatus, updated_at: agora })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (data) setExtratos((prev) => prev.map((e) => (e.id === existente.id ? data : e)));
+    } else {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .insert({ banco_id: bancoId, competencia: extrCompetencia, status: novoStatus })
+        .select()
+        .single();
+      if (data) setExtratos((prev) => [...prev, data]);
+    }
+  };
+
+  const registrarCobrancaBanco = async (bancoId: string) => {
+    const existente = extratoPorBanco[bancoId];
+    const agora = new Date().toISOString();
+    if (existente) {
+      if (existente.status === 'recebido' || existente.status === 'importado') return existente;
+      const novaQtd = (existente.qtd_solicitacoes || 0) + 1;
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .update({
+          qtd_solicitacoes: novaQtd,
+          ultima_solicitacao_em: agora,
+          status: 'solicitado',
+          updated_at: agora,
+        })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (data) setExtratos((prev) => prev.map((e) => (e.id === existente.id ? data : e)));
+      return data;
+    } else {
+      const { data } = await supabase
+        .from('solicitacoes_extrato')
+        .insert({
+          banco_id: bancoId,
+          competencia: extrCompetencia,
+          status: 'solicitado',
+          qtd_solicitacoes: 1,
+          ultima_solicitacao_em: agora,
+        })
+        .select()
+        .single();
+      if (data) setExtratos((prev) => [...prev, data]);
+      return data;
+    }
+  };
+
+  const handleRegistrarCobranca = async (bancoId: string) => {
+    await registrarCobrancaBanco(bancoId);
+  };
+
+  const handleCobrarTodosDaEmpresa = async (empresaId: string) => {
+    const bs = bancosPorEmpresa[empresaId] || [];
+    const pendentes = bs.filter((b) => {
+      const e = extratoPorBanco[b.id];
+      return !e || (e.status !== 'recebido' && e.status !== 'importado');
+    });
+    if (pendentes.length === 0) return;
+    for (const b of pendentes) {
+      await registrarCobrancaBanco(b.id);
+    }
+  };
+
   const handleToggleTarefa = async (tarefa: TarefaEmpresa) => {
     const { data: { user } } = await supabase.auth.getUser();
     const feita = !tarefa.feita;
@@ -283,6 +444,15 @@ export default function DashboardAnalista() {
       icone: (
         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+    },
+    {
+      id: 'extratos',
+      label: 'Extratos',
+      icone: (
+        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h18M3 6h18M3 14h18M3 18h18" />
         </svg>
       ),
     },
@@ -937,6 +1107,228 @@ export default function DashboardAnalista() {
                     </table>
                   </div>
                 )}
+              </div>
+            </>
+          )}
+
+          {aba === 'extratos' && (
+            <>
+              <div className="mb-6 border-b border-slate-200 pb-6">
+                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  Controle de extratos
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                  Registrar e acompanhar extratos
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  Cobre solicitações e atualize status direto na lista, sem precisar abrir cada empresa.
+                </p>
+              </div>
+
+              {/* Seletor de competência */}
+              <div className="mb-6 bg-white border border-slate-200 rounded-md">
+                <div className="px-4 py-3 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Ano
+                    </label>
+                    <select
+                      value={extrAno}
+                      onChange={(e) => setExtrAno(e.target.value)}
+                      className="px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    >
+                      {Array.from({ length: 5 }, (_, i) => String(hoje.getFullYear() - 2 + i)).map((a) => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Competência: <strong className="text-slate-900">{extrCompetencia}</strong>
+                  </p>
+                </div>
+                <div className="px-2 py-2 flex flex-wrap gap-1">
+                  {MESES.map((m) => {
+                    const ativo = extrMes === m.num;
+                    return (
+                      <button
+                        key={m.num}
+                        onClick={() => setExtrMes(m.num)}
+                        className={`flex-1 min-w-[58px] px-3 py-2 text-xs font-medium rounded transition ${
+                          ativo
+                            ? 'bg-slate-900 text-white'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Filtros */}
+              <div className="bg-white border border-slate-200 rounded-md shadow-sm">
+                <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_200px] gap-3">
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={extrBusca}
+                      onChange={(e) => setExtrBusca(e.target.value)}
+                      placeholder="Pesquisar empresa..."
+                      className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    />
+                  </div>
+                  <select
+                    value={extrFiltro}
+                    onChange={(e) => setExtrFiltro(e.target.value as FiltroExtrato)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                  >
+                    <option value="todos">Todos os status</option>
+                    <option value="pendentes">Pendentes (0 recebidos)</option>
+                    <option value="parciais">Parciais (recebimento incompleto)</option>
+                    <option value="completos">Completos (todos recebidos)</option>
+                  </select>
+                </div>
+
+                {(() => {
+                  const termo = extrBusca.trim().toLowerCase();
+                  const empresasFiltradasExt = empresas.filter((emp) => {
+                    if (emp.nao_envia_extratos) return false;
+                    if (emp.status === 'baixada') return false;
+                    if (termo && !emp.nome.toLowerCase().includes(termo)) return false;
+                    const s = statusGeralEmpresa(emp.id);
+                    if (s.classe === 'sem_bancos') return extrFiltro === 'todos';
+                    if (extrFiltro === 'pendentes' && s.recebidos !== 0) return false;
+                    if (extrFiltro === 'parciais' && s.classe !== 'parcial') return false;
+                    if (extrFiltro === 'completos' && s.classe !== 'completo') return false;
+                    return true;
+                  });
+
+                  if (empresasFiltradasExt.length === 0) {
+                    return (
+                      <div className="p-10 text-center">
+                        <p className="text-sm text-slate-500">Nenhuma empresa encontrada para o filtro.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <ul className="divide-y divide-slate-100">
+                      {empresasFiltradasExt.map((emp) => {
+                        const bs = bancosPorEmpresa[emp.id] || [];
+                        const s = statusGeralEmpresa(emp.id);
+                        const temPendente = bs.some((b) => {
+                          const e = extratoPorBanco[b.id];
+                          return !e || (e.status !== 'recebido' && e.status !== 'importado');
+                        });
+                        return (
+                          <li key={emp.id} className="p-4">
+                            <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                              <div className="min-w-0 flex-1">
+                                <Link
+                                  href={`/empresa/${emp.id}`}
+                                  className="text-sm font-semibold text-slate-900 hover:underline"
+                                >
+                                  {emp.nome}
+                                </Link>
+                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  {s.classe === 'sem_bancos' ? (
+                                    <span className="text-[11px] text-slate-400 italic">Sem bancos cadastrados</span>
+                                  ) : (
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${
+                                        s.classe === 'completo'
+                                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                          : s.classe === 'parcial'
+                                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                          : 'bg-slate-100 text-slate-700 border-slate-300'
+                                      }`}
+                                    >
+                                      {s.recebidos}/{s.total} recebidos
+                                    </span>
+                                  )}
+                                  {emp.status === 'suspensa' && (
+                                    <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                                      Suspensa
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {temPendente && bs.length > 0 && (
+                                <button
+                                  onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
+                                  className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
+                                >
+                                  + Cobrar todos pendentes
+                                </button>
+                              )}
+                            </div>
+
+                            {bs.length > 0 && (
+                              <table className="w-full text-sm">
+                                <tbody>
+                                  {bs.map((b) => {
+                                    const e = extratoPorBanco[b.id];
+                                    const status = (e?.status || 'pendente') as StatusExtrato;
+                                    const recebido = status === 'recebido' || status === 'importado';
+                                    const qtd = e?.qtd_solicitacoes || 0;
+                                    return (
+                                      <tr key={b.id} className="border-t border-slate-100">
+                                        <td className="py-2 pl-6 pr-2 text-slate-700 text-sm">
+                                          {b.nome_banco}
+                                        </td>
+                                        <td className="py-2 px-2">
+                                          <span
+                                            className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${STATUS_EXT_CLASS[status]}`}
+                                          >
+                                            {STATUS_EXT_LABEL[status]}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 px-2 text-[11px] text-slate-500">
+                                          {qtd > 0 ? `${qtd}× cobrado` : '—'}
+                                          {e?.ultima_solicitacao_em && (
+                                            <span className="ml-1">
+                                              · {new Date(e.ultima_solicitacao_em).toLocaleDateString('pt-BR')}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-2 pl-2 text-right whitespace-nowrap">
+                                          <div className="inline-flex items-center gap-1.5">
+                                            <select
+                                              value={status}
+                                              onChange={(ev) => handleStatusExtrato(b.id, ev.target.value as StatusExtrato)}
+                                              className="px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                            >
+                                              <option value="pendente">Pendente</option>
+                                              <option value="solicitado">Solicitado</option>
+                                              <option value="recebido">Recebido</option>
+                                              <option value="importado">Importado</option>
+                                            </select>
+                                            <button
+                                              onClick={() => handleRegistrarCobranca(b.id)}
+                                              disabled={recebido}
+                                              title={recebido ? 'Já recebido' : 'Registrar cobrança'}
+                                              className="text-xs font-medium px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-700 disabled:hover:border-slate-300 transition"
+                                            >
+                                              + Cobrar
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  );
+                })()}
               </div>
             </>
           )}
