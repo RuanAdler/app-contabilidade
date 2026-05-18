@@ -49,7 +49,9 @@ export default function EmpresaDetail() {
   const [obsGeralTexto, setObsGeralTexto] = useState('');
   const [salvandoObsGeral, setSalvandoObsGeral] = useState(false);
   const [aba, setAba] = useState<AbaEmpresa>('checklist');
-  const [sidebarAberta, setSidebarAberta] = useState(true);
+  const [sidebarFixa, setSidebarFixa] = useState(false);
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const sidebarAberta = sidebarFixa || sidebarHover;
 
   // Sessões de trabalho
   const [sessaoAtiva, setSessaoAtiva] = useState<SessaoTrabalho | null>(null);
@@ -466,22 +468,27 @@ export default function EmpresaDetail() {
       <Navbar usuario={usuario} />
 
       <div className="flex flex-1">
+        <div
+          className="relative w-14 shrink-0"
+          onMouseEnter={() => setSidebarHover(true)}
+          onMouseLeave={() => setSidebarHover(false)}
+        >
         <aside
-          className={`bg-white border-r border-slate-200 transition-all duration-200 flex flex-col ${
-            sidebarAberta ? 'w-56' : 'w-14'
+          className={`absolute inset-y-0 left-0 bg-white border-r border-slate-200 transition-all duration-200 flex flex-col z-20 ${
+            sidebarAberta ? 'w-56 shadow-lg' : 'w-14'
           }`}
         >
           <div className="h-12 flex items-center justify-end px-2 border-b border-slate-200">
             <button
-              onClick={() => setSidebarAberta(!sidebarAberta)}
+              onClick={() => setSidebarFixa(!sidebarFixa)}
               className="h-8 w-8 inline-flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition"
-              title={sidebarAberta ? 'Ocultar menu' : 'Mostrar menu'}
+              title={sidebarFixa ? 'Liberar menu (passar mouse pra abrir)' : 'Fixar menu aberto'}
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {sidebarAberta ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                {sidebarFixa ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5h14M5 19h14M5 12h14" />
                 ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 )}
               </svg>
             </button>
@@ -526,6 +533,7 @@ export default function EmpresaDetail() {
             })}
           </nav>
         </aside>
+        </div>
 
       <main className="flex-1 max-w-6xl mx-auto px-6 py-8 min-w-0">
         <button
