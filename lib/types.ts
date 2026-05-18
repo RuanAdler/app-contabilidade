@@ -89,6 +89,18 @@ export interface PedidoHelp {
   created_at: string;
 }
 
+export interface SessaoTrabalho {
+  id: string;
+  empresa_id: string;
+  competencia: string;
+  analista_email: string;
+  inicio_em: string;
+  fim_em: string | null;
+  duracao_segundos: number | null;
+  motivo_pausa: string | null;
+  created_at: string;
+}
+
 export interface TarefaEmpresa {
   id: string;
   empresa_id: string;
