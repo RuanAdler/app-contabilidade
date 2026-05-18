@@ -1223,122 +1223,104 @@ export default function DashboardAnalista() {
                   }
 
                   return (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Empresa</th>
-                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Status</th>
-                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Cobranças</th>
-                            <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Ações rápidas</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {empresasFiltradasExt.map((emp, idx) => {
-                            const bs = bancosPorEmpresa[emp.id] || [];
-                            const s = statusGeralEmpresa(emp.id);
-                            const temPendente = bs.some((b) => {
-                              const e = extratoPorBanco[b.id];
-                              return !e || (e.status !== 'recebido' && e.status !== 'importado');
-                            });
-                            const totalCobrancas = bs.reduce((sum, b) => {
-                              const e = extratoPorBanco[b.id];
-                              return sum + (e?.qtd_solicitacoes || 0);
-                            }, 0);
-                            const statusesDistintos = new Set(
-                              bs.map((b) => extratoPorBanco[b.id]?.status || 'pendente')
-                            );
-                            const statusUnico = statusesDistintos.size === 1
-                              ? (Array.from(statusesDistintos)[0] as StatusExtrato)
-                              : null;
-                            return (
-                              <tr
-                                key={emp.id}
-                                className={`border-b border-slate-100 hover:bg-slate-50 ${
-                                  idx === empresasFiltradasExt.length - 1 ? 'border-b-0' : ''
-                                }`}
-                              >
-                                <td className="px-4 py-3 align-middle">
-                                  <Link
-                                    href={`/empresa/${emp.id}`}
-                                    className="text-slate-900 font-medium hover:underline"
-                                  >
-                                    {emp.nome}
-                                  </Link>
-                                  {emp.status === 'suspensa' && (
-                                    <span className="ml-2 inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
-                                      Suspensa
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 align-middle">
-                                  {s.classe === 'sem_bancos' ? (
-                                    <span className="text-[11px] text-slate-400 italic">Sem bancos</span>
-                                  ) : (
-                                    <span
-                                      className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${
-                                        s.classe === 'completo'
-                                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                          : s.classe === 'parcial'
-                                          ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                          : 'bg-slate-100 text-slate-700 border-slate-300'
-                                      }`}
-                                    >
-                                      {s.recebidos}/{s.total} recebidos
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 align-middle text-slate-700 text-sm">
-                                  {totalCobrancas > 0 ? (
-                                    <span className={totalCobrancas >= 3 * Math.max(bs.length, 1) ? 'text-amber-700 font-medium' : ''}>
-                                      {totalCobrancas}×
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">—</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
-                                  <div className="inline-flex items-center gap-2 flex-wrap justify-end">
-                                    {bs.length > 0 && (
-                                      <select
-                                        value={statusUnico || ''}
-                                        onChange={(ev) => handleAplicarStatusEmTodos(emp.id, ev.target.value as StatusExtrato)}
-                                        className="px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-                                        title="Aplica o status escolhido a todos os bancos da empresa"
-                                      >
-                                        <option value="" disabled>
-                                          {statusUnico ? STATUS_EXT_LABEL[statusUnico] : 'Vários status'}
-                                        </option>
-                                        <option value="pendente">Marcar todos: Pendente</option>
-                                        <option value="solicitado">Marcar todos: Solicitado</option>
-                                        <option value="recebido">Marcar todos: Recebido</option>
-                                        <option value="importado">Marcar todos: Importado</option>
-                                      </select>
+                    <ul className="divide-y divide-slate-100">
+                      {empresasFiltradasExt.map((emp) => {
+                        const bs = bancosPorEmpresa[emp.id] || [];
+                        const pendentes = bs.filter((b) => {
+                          const e = extratoPorBanco[b.id];
+                          return !e || (e.status !== 'recebido' && e.status !== 'importado');
+                        });
+                        const statusesDistintos = new Set(
+                          bs.map((b) => extratoPorBanco[b.id]?.status || 'pendente')
+                        );
+                        const statusUnico = statusesDistintos.size === 1
+                          ? (Array.from(statusesDistintos)[0] as StatusExtrato)
+                          : null;
+                        return (
+                          <li key={emp.id} className="px-4 py-3 hover:bg-slate-50">
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_140px] gap-3 items-center">
+                              {/* Coluna empresa + bancos em itálico */}
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/empresa/${emp.id}/extratos`}
+                                  className="text-sm font-semibold text-slate-900 hover:underline"
+                                >
+                                  {emp.nome}
+                                </Link>
+                                {emp.status === 'suspensa' && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300 align-middle">
+                                    Suspensa
+                                  </span>
+                                )}
+                                {bs.length === 0 ? (
+                                  <p className="text-[11px] text-slate-400 italic mt-0.5">
+                                    Sem bancos cadastrados
+                                  </p>
+                                ) : (
+                                  <div className="mt-0.5 space-y-0.5">
+                                    <p className="text-[11px] text-slate-500 italic truncate">
+                                      <span className="text-slate-400">Bancos:</span>{' '}
+                                      {bs.map((b) => b.nome_banco).join(', ')}
+                                    </p>
+                                    {pendentes.length > 0 ? (
+                                      <p className="text-[11px] text-amber-700 italic truncate">
+                                        <span className="text-amber-600">Pendentes:</span>{' '}
+                                        {pendentes.map((b) => b.nome_banco).join(', ')}
+                                      </p>
+                                    ) : (
+                                      <p className="text-[11px] text-emerald-700 italic">
+                                        Todos os extratos recebidos
+                                      </p>
                                     )}
-                                    {temPendente && bs.length > 0 && (
-                                      <button
-                                        onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
-                                        className="text-xs font-medium px-2.5 py-1 rounded bg-slate-900 text-white hover:bg-slate-800 transition"
-                                        title="Registra cobrança em todos os bancos pendentes"
-                                      >
-                                        + Cobrar pendentes
-                                      </button>
-                                    )}
-                                    <Link
-                                      href={`/empresa/${emp.id}`}
-                                      className="text-xs font-medium px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
-                                      title="Ver detalhes e gerenciar bancos"
-                                    >
-                                      Detalhes
-                                    </Link>
                                   </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                )}
+                              </div>
+
+                              {/* Dropdown de status rápido */}
+                              <div>
+                                {bs.length > 0 ? (
+                                  <select
+                                    value={statusUnico || ''}
+                                    onChange={(ev) => handleAplicarStatusEmTodos(emp.id, ev.target.value as StatusExtrato)}
+                                    className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                    title="Aplica o status escolhido a todos os bancos"
+                                  >
+                                    <option value="" disabled>
+                                      {statusUnico ? STATUS_EXT_LABEL[statusUnico] : 'Vários status'}
+                                    </option>
+                                    <option value="pendente">Marcar todos: Pendente</option>
+                                    <option value="solicitado">Marcar todos: Solicitado</option>
+                                    <option value="recebido">Marcar todos: Recebido</option>
+                                    <option value="importado">Marcar todos: Importado</option>
+                                  </select>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic">—</span>
+                                )}
+                              </div>
+
+                              {/* Botão de solicitação */}
+                              <div className="text-right">
+                                {pendentes.length > 0 ? (
+                                  <button
+                                    onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
+                                    className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition w-full"
+                                    title="Registra cobrança em todos os bancos pendentes"
+                                  >
+                                    + Cobrar ({pendentes.length})
+                                  </button>
+                                ) : bs.length > 0 ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border bg-emerald-50 text-emerald-800 border-emerald-300">
+                                    Concluído
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400">—</span>
+                                )}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   );
                 })()}
               </div>
