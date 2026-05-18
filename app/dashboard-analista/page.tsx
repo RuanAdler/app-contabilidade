@@ -1294,13 +1294,27 @@ export default function DashboardAnalista() {
                                     <option value="importado">Marcar todos: Importado</option>
                                   </select>
                                 ) : (
-                                  <span className="text-[11px] text-slate-400 italic">—</span>
+                                  <select
+                                    disabled
+                                    className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 text-slate-400 cursor-not-allowed"
+                                    title="Cadastre um banco antes de alterar o status"
+                                  >
+                                    <option>Sem bancos</option>
+                                  </select>
                                 )}
                               </div>
 
                               {/* Botão de solicitação */}
                               <div className="text-right">
-                                {pendentes.length > 0 ? (
+                                {bs.length === 0 ? (
+                                  <Link
+                                    href={`/empresa/${emp.id}/extratos`}
+                                    className="inline-block text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition w-full text-center"
+                                    title="Cadastrar bancos da empresa"
+                                  >
+                                    + Cadastrar banco
+                                  </Link>
+                                ) : pendentes.length > 0 ? (
                                   <button
                                     onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
                                     className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition w-full"
@@ -1308,12 +1322,10 @@ export default function DashboardAnalista() {
                                   >
                                     + Cobrar ({pendentes.length})
                                   </button>
-                                ) : bs.length > 0 ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border bg-emerald-50 text-emerald-800 border-emerald-300">
-                                    Concluído
-                                  </span>
                                 ) : (
-                                  <span className="text-[11px] text-slate-400">—</span>
+                                  <span className="inline-flex items-center justify-center px-3 py-1.5 text-[11px] font-medium rounded border bg-emerald-50 text-emerald-800 border-emerald-300 w-full">
+                                    ✓ Concluído
+                                  </span>
                                 )}
                               </div>
                             </div>
