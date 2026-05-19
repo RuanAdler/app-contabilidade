@@ -5,7 +5,18 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, TarefaEmpresa, ObservacaoEmpresa } from '@/lib/types';
+import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, TarefaEmpresa, ObservacaoEmpresa, EtapaChecklist, GrupoChecklist } from '@/lib/types';
+
+const GRUPO_LABEL: Record<GrupoChecklist, string> = {
+  ativo: 'Ativo',
+  passivo: 'Passivo',
+  patrimonio_liquido: 'Patrimônio Líquido',
+};
+
+const SUBGRUPO_LABEL: Record<string, string> = {
+  circulante: 'Circulante',
+  nao_circulante: 'Não circulante',
+};
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroStatus = 'todos' | StatusEmpresa;
@@ -68,6 +79,7 @@ export default function DashboardCoordenador() {
   const [solucaoRascunho, setSolucaoRascunho] = useState<Record<string, string>>({});
   const [tarefasMes, setTarefasMes] = useState<TarefaEmpresa[]>([]);
   const [observacoesMes, setObservacoesMes] = useState<ObservacaoEmpresa[]>([]);
+  const [etapas, setEtapas] = useState<EtapaChecklist[]>([]);
   const [mostrarMaisAtencao, setMostrarMaisAtencao] = useState(false);
 
   // Filtros dos relatórios
@@ -163,10 +175,13 @@ export default function DashboardCoordenador() {
         .in('competencia', competencias6mLista);
       setChecklist6m(checklistData || []);
 
-      const { count: countEtapas } = await supabase
+      const { data: etapasData } = await supabase
         .from('etapas_checklist')
-        .select('*', { count: 'exact', head: true });
-      setTotalEtapas(countEtapas || 0);
+        .select('*')
+        .order('ordem');
+      const listaEtapas = etapasData || [];
+      setEtapas(listaEtapas);
+      setTotalEtapas(listaEtapas.length);
 
       const { data: helpData } = await supabase
         .from('pedidos_help')
@@ -393,6 +408,39 @@ export default function DashboardCoordenador() {
     d.setHours(0, 0, 0, 0);
     return d.getTime();
   }, []);
+
+  // Mapa etapa_id → grupo/subgrupo
+  const etapaInfo = useMemo(() => {
+    const map: Record<string, { grupo: GrupoChecklist; subgrupo: string | null }> = {};
+    etapas.forEach((e) => { map[e.id] = { grupo: e.grupo, subgrupo: e.subgrupo }; });
+    return map;
+  }, [etapas]);
+
+  // Foco do analista HOJE: qual subgrupo/grupo recebeu mais marcações
+  const focoHojePorAnalista = useMemo(() => {
+    const map: Record<string, { label: string; marcacoes: number } | null> = {};
+    analistas.forEach((a) => { map[a.email] = null; });
+
+    for (const a of analistas) {
+      const contagem: Record<string, number> = {};
+      for (const c of checklist6m) {
+        if (!c.feito_em || !c.feito_por) continue;
+        if (c.feito_por !== a.email) continue;
+        if (new Date(c.feito_em).getTime() < inicioHojeMs) continue;
+        const info = etapaInfo[c.etapa_id];
+        if (!info) continue;
+        const label = info.subgrupo
+          ? `${GRUPO_LABEL[info.grupo]} · ${SUBGRUPO_LABEL[info.subgrupo] || info.subgrupo}`
+          : GRUPO_LABEL[info.grupo];
+        contagem[label] = (contagem[label] || 0) + 1;
+      }
+      const entries = Object.entries(contagem).sort((x, y) => y[1] - x[1]);
+      if (entries.length > 0) {
+        map[a.email] = { label: entries[0][0], marcacoes: entries[0][1] };
+      }
+    }
+    return map;
+  }, [analistas, checklist6m, etapaInfo, inicioHojeMs]);
 
   // Empresas únicas que cada analista tocou HOJE
   // (marcou conta no checklist, criou tarefa ou atualizou observação)
@@ -863,15 +911,23 @@ export default function DashboardCoordenador() {
                     {analistas.every((a) => (atividadeHojePorAnalista[a.email]?.size || 0) === 0) ? (
                       <p className="text-xs text-slate-400 italic">Nenhum analista mexeu em empresas hoje.</p>
                     ) : (
-                      <ul className="space-y-1">
+                      <ul className="space-y-2">
                         {analistas.map((a) => {
                           const qtd = atividadeHojePorAnalista[a.email]?.size || 0;
+                          const foco = focoHojePorAnalista[a.email];
                           return (
-                            <li key={a.id} className="text-xs flex items-baseline justify-between gap-1.5">
-                              <span className="font-medium text-slate-900 truncate">{a.nome}</span>
-                              <span className={`tabular-nums ${qtd > 0 ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>
-                                {qtd} empresa{qtd === 1 ? '' : 's'}
-                              </span>
+                            <li key={a.id} className="text-xs">
+                              <div className="flex items-baseline justify-between gap-1.5">
+                                <span className="font-medium text-slate-900 truncate">{a.nome}</span>
+                                <span className={`tabular-nums shrink-0 ${qtd > 0 ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>
+                                  {qtd} empresa{qtd === 1 ? '' : 's'}
+                                </span>
+                              </div>
+                              {foco && (
+                                <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                                  Focando em <span className="font-medium text-slate-700">{foco.label}</span>
+                                </p>
+                              )}
                             </li>
                           );
                         })}

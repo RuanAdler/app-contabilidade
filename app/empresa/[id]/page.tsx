@@ -530,27 +530,48 @@ export default function EmpresaDetail() {
                   const feitosGrupo = Object.values(subgrupos).flat().filter(
                     (e) => progressoPorEtapa[e.id]?.feito_em
                   ).length;
+                  const pctGrupo = totalGrupo > 0 ? Math.round((feitosGrupo / totalGrupo) * 100) : 0;
+                  const corGrupo = pctGrupo === 100 ? 'bg-emerald-500' : pctGrupo > 0 ? 'bg-amber-500' : 'bg-slate-300';
 
                   return (
                     <div key={grupo} className="bg-white">
-                      <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                        <h3 className="text-xs font-bold tracking-wider text-slate-700 uppercase">
-                          {GRUPO_LABEL[grupo]}
-                        </h3>
-                        <span className="text-[11px] font-medium text-slate-500">
-                          {feitosGrupo}/{totalGrupo}
-                        </span>
+                      <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <h3 className="text-xs font-bold tracking-wider text-slate-700 uppercase">
+                            {GRUPO_LABEL[grupo]}
+                          </h3>
+                          <span className="text-[11px] font-medium text-slate-700 tabular-nums">
+                            {feitosGrupo}/{totalGrupo} ({pctGrupo}%)
+                          </span>
+                        </div>
+                        <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
+                          <div className={`h-full ${corGrupo} transition-all`} style={{ width: `${pctGrupo}%` }} />
+                        </div>
                       </div>
 
                       <div className="p-4 space-y-4">
                         {Object.entries(subgrupos).map(([subkey, lista]) => {
                           if (lista.length === 0) return null;
+                          const totalSub = lista.length;
+                          const feitosSub = lista.filter((e) => progressoPorEtapa[e.id]?.feito_em).length;
+                          const pctSub = totalSub > 0 ? Math.round((feitosSub / totalSub) * 100) : 0;
+                          const corSub = pctSub === 100 ? 'bg-emerald-500' : pctSub > 0 ? 'bg-amber-500' : 'bg-slate-300';
                           return (
                             <div key={subkey}>
                               {subkey !== '_' && (
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                                  {SUBGRUPO_LABEL[subkey]}
-                                </p>
+                                <div className="mb-2">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                      {SUBGRUPO_LABEL[subkey]}
+                                    </p>
+                                    <span className="text-[10px] font-medium text-slate-500 tabular-nums">
+                                      {feitosSub}/{totalSub}
+                                    </span>
+                                  </div>
+                                  <div className="h-0.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className={`h-full ${corSub} transition-all`} style={{ width: `${pctSub}%` }} />
+                                  </div>
+                                </div>
                               )}
                               <ul className="space-y-1">
                                 {lista.map((etapa) => {
