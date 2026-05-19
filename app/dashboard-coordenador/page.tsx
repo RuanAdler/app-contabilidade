@@ -756,7 +756,7 @@ export default function DashboardCoordenador() {
           {aba === 'visao' && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Painel de Coordenação
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -769,19 +769,19 @@ export default function DashboardCoordenador() {
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Empresas ativas
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">{totalAtivas}</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Analistas
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">{analistas.length}</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Média/analista
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">
@@ -789,7 +789,7 @@ export default function DashboardCoordenador() {
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Tempo da equipe
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums">
@@ -797,7 +797,7 @@ export default function DashboardCoordenador() {
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Não envia
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-amber-700">{totalNaoEnvia}</p>
@@ -818,7 +818,7 @@ export default function DashboardCoordenador() {
                   {/* Trabalhando agora */}
                   <div className="bg-white border border-slate-200 rounded-md p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      <p className="label-tiny">
                         Trabalhando agora
                       </p>
                       <span className="text-xl font-semibold text-slate-900">{trabalhandoAgora.length}</span>
@@ -845,7 +845,7 @@ export default function DashboardCoordenador() {
                   {/* Helps urgentes */}
                   <div className="bg-white border border-slate-200 rounded-md p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      <p className="label-tiny">
                         Helps urgentes
                       </p>
                       <span className={`text-xl font-semibold ${helpsUrgentes > 0 ? 'text-red-700' : 'text-slate-900'}`}>
@@ -873,7 +873,7 @@ export default function DashboardCoordenador() {
                   {/* Tarefas atrasadas */}
                   <div className="bg-white border border-slate-200 rounded-md p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      <p className="label-tiny">
                         Tarefas atrasadas
                       </p>
                       <span className={`text-xl font-semibold ${tarefasAtrasadasEquipe.length > 0 ? 'text-red-700' : 'text-slate-900'}`}>
@@ -1129,7 +1129,7 @@ export default function DashboardCoordenador() {
           {aba === 'desempenho' && !analistaDetalhado && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Equipe
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -1435,7 +1435,7 @@ export default function DashboardCoordenador() {
                     {a.nome.slice(0, 2)}
                   </span>
                   <div>
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                    <p className="label-tiny">
                       Analista
                     </p>
                     <h1 className="text-2xl font-semibold text-slate-900">{a.nome}</h1>
@@ -1445,11 +1445,11 @@ export default function DashboardCoordenador() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                   <div className="bg-white border border-slate-200 rounded-md p-4">
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Carteira</p>
+                    <p className="label-tiny">Carteira</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{empresasA.length}</p>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-md p-4">
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Balanços concluídos</p>
+                    <p className="label-tiny">Balanços concluídos</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">
                       {s?.percentConcluido || 0}%
                       <span className="text-sm font-normal text-slate-500 ml-2">
@@ -1458,11 +1458,11 @@ export default function DashboardCoordenador() {
                     </p>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-md p-4">
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Em andamento</p>
+                    <p className="label-tiny">Em andamento</p>
                     <p className="mt-2 text-2xl font-semibold text-amber-700">{s?.parciais || 0}</p>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-md p-4">
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Em atenção</p>
+                    <p className="label-tiny">Em atenção</p>
                     <p className="mt-2 text-2xl font-semibold text-amber-700">{atencoes.length}</p>
                   </div>
                 </div>
@@ -1541,7 +1541,7 @@ export default function DashboardCoordenador() {
             <>
               <div className="mb-8 border-b border-slate-200 pb-6 flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Administração
                   </p>
                   <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -1561,19 +1561,19 @@ export default function DashboardCoordenador() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Ativas</p>
+                  <p className="label-tiny">Ativas</p>
                   <p className="mt-2 text-2xl font-semibold text-emerald-700">{totalAtivas}</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Suspensas</p>
+                  <p className="label-tiny">Suspensas</p>
                   <p className="mt-2 text-2xl font-semibold text-amber-700">{totalSuspensas}</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Baixadas</p>
+                  <p className="label-tiny">Baixadas</p>
                   <p className="mt-2 text-2xl font-semibold text-slate-500">{totalBaixadas}</p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Total</p>
+                  <p className="label-tiny">Total</p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">{empresas.length}</p>
                 </div>
               </div>
@@ -1747,7 +1747,7 @@ export default function DashboardCoordenador() {
           {aba === 'help' && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Suporte à equipe
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -1950,7 +1950,7 @@ export default function DashboardCoordenador() {
           {aba === 'relatorios' && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Documentação
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -2190,7 +2190,7 @@ export default function DashboardCoordenador() {
                 <button
                   type="submit"
                   disabled={salvandoNova || !novaEmpNome.trim()}
-                  className="text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition"
+                  className="btn-primary"
                 >
                   {salvandoNova ? 'Salvando...' : 'Adicionar'}
                 </button>

@@ -549,7 +549,7 @@ export default function EmpresaDetail() {
         <div className="mb-8 border-b border-slate-200 pb-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+              <p className="label-tiny">
                 Empresa
               </p>
               <h1 className="mt-1 text-2xl font-semibold text-slate-900">{empresa.nome}</h1>
@@ -585,7 +585,7 @@ export default function EmpresaDetail() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="label-tiny">
                     Tempo no mês
                   </p>
                   <p className="text-xl font-mono font-bold text-slate-900 tabular-nums">
@@ -1086,7 +1086,7 @@ export default function EmpresaDetail() {
                 type="button"
                 onClick={confirmarPausa}
                 disabled={pausando}
-                className="text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition"
+                className="btn-primary"
               >
                 {pausando ? 'Pausando...' : 'Confirmar pausa'}
               </button>

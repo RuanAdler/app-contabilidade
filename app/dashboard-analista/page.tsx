@@ -588,7 +588,7 @@ export default function DashboardAnalista() {
           {aba === 'pendencias' && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Minhas pendências
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -601,7 +601,7 @@ export default function DashboardAnalista() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Atrasadas
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-red-700">
@@ -609,7 +609,7 @@ export default function DashboardAnalista() {
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Para hoje
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-amber-700">
@@ -617,7 +617,7 @@ export default function DashboardAnalista() {
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Próximos 7 dias
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-700">
@@ -625,7 +625,7 @@ export default function DashboardAnalista() {
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                  <p className="label-tiny">
                     Balanços não iniciados
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-slate-900">
@@ -760,7 +760,7 @@ export default function DashboardAnalista() {
           {aba === 'help' && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Suporte
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -965,7 +965,7 @@ export default function DashboardAnalista() {
           {aba === 'empresas' && (
             <>
               <div className="mb-8 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Carteira de Clientes
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">
@@ -985,7 +985,7 @@ export default function DashboardAnalista() {
                     filtroBalanco === 'nao_iniciado' ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-400'
                   }`}
                 >
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Não iniciado</p>
+                  <p className="label-tiny">Não iniciado</p>
                   <p className="mt-2 text-2xl font-semibold text-slate-700">{contagens.nao_iniciado}</p>
                 </button>
                 <button
@@ -994,7 +994,7 @@ export default function DashboardAnalista() {
                     filtroBalanco === 'em_andamento' ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-400'
                   }`}
                 >
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Em andamento</p>
+                  <p className="label-tiny">Em andamento</p>
                   <p className="mt-2 text-2xl font-semibold text-amber-700">{contagens.em_andamento}</p>
                 </button>
                 <button
@@ -1003,7 +1003,7 @@ export default function DashboardAnalista() {
                     filtroBalanco === 'concluido' ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-400'
                   }`}
                 >
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Concluído</p>
+                  <p className="label-tiny">Concluído</p>
                   <p className="mt-2 text-2xl font-semibold text-emerald-700">{contagens.concluido}</p>
                 </button>
                 <button
@@ -1012,7 +1012,7 @@ export default function DashboardAnalista() {
                     filtroBalanco === 'atrasado' ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-400'
                   }`}
                 >
-                  <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Atrasado</p>
+                  <p className="label-tiny">Atrasado</p>
                   <p className="mt-2 text-2xl font-semibold text-red-700">{contagens.atrasado}</p>
                 </button>
               </div>
@@ -1129,7 +1129,7 @@ export default function DashboardAnalista() {
           {aba === 'extratos' && (
             <>
               <div className="mb-6 border-b border-slate-200 pb-6">
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="label-tiny">
                   Controle de extratos
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold text-slate-900">

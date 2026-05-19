@@ -19,6 +19,80 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ============================================
+   Design system — classes utilitárias
+   ============================================ */
+
+@layer components {
+
+  /* ---- Tipografia ---- */
+  .label-tiny {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-slate-500;
+  }
+  .label-section {
+    @apply text-xs font-bold uppercase tracking-wider text-slate-900;
+  }
+  .meta-text {
+    @apply text-xs text-slate-500;
+  }
+
+  /* ---- Cards ---- */
+  .card {
+    @apply bg-white border border-slate-200 rounded-md shadow-sm;
+  }
+  .card-header {
+    @apply px-5 py-4 border-b border-slate-200;
+  }
+  .card-padded {
+    @apply p-5;
+  }
+
+  /* ---- Botões ---- */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 text-sm font-medium px-4 py-2 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition;
+  }
+  .btn-primary-sm {
+    @apply inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 text-sm font-medium px-4 py-2 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition;
+  }
+  .btn-secondary-sm {
+    @apply inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition;
+  }
+
+  /* ---- Badges de status ---- */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border;
+  }
+  .badge-neutro {
+    @apply bg-slate-100 text-slate-700 border-slate-300;
+  }
+  .badge-info {
+    @apply bg-slate-50 text-slate-700 border-slate-300;
+  }
+  .badge-aviso {
+    @apply bg-amber-50 text-amber-800 border-amber-300;
+  }
+  .badge-sucesso {
+    @apply bg-emerald-50 text-emerald-800 border-emerald-300;
+  }
+  .badge-erro {
+    @apply bg-red-50 text-red-800 border-red-300;
+  }
+  .badge-destaque {
+    @apply bg-slate-900 text-white border-slate-900;
+  }
+
+  /* ---- Inputs ---- */
+  .input-text {
+    @apply w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400;
+  }
+  .input-select {
+    @apply w-full px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-400;
+  }
+}
+
 @media print {
   @page {
     size: A4;
