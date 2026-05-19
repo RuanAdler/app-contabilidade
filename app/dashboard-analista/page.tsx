@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
@@ -61,7 +61,15 @@ const STATUS_CLASS: Record<StatusBalanco, string> = {
   atrasado: 'bg-red-50 text-red-800 border-red-300',
 };
 
-export default function DashboardAnalista() {
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><p className="text-sm text-slate-500">Carregando...</p></div>}>
+      <DashboardAnalista />
+    </Suspense>
+  );
+}
+
+function DashboardAnalista() {
   const [usuario, setUsuario] = useState<any>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [checklistMes, setChecklistMes] = useState<ProgressoChecklist[]>([]);
@@ -71,7 +79,25 @@ export default function DashboardAnalista() {
   const [filtroEnvio, setFiltroEnvio] = useState<FiltroEnvio>('todas');
   const [filtroBalanco, setFiltroBalanco] = useState<FiltroBalanco>('todos');
   const [loading, setLoading] = useState(true);
-  const [aba, setAba] = useState<Aba>('empresas');
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const abaInicial = (searchParams.get('aba') as Aba) || 'empresas';
+  const [aba, setAbaState] = useState<Aba>(abaInicial);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('aba') as Aba | null;
+    if (fromUrl && fromUrl !== aba) {
+      setAbaState(fromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const setAba = (nova: Aba) => {
+    setAbaState(nova);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('aba', nova);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
   const [sidebarFixa, setSidebarFixa] = useState(false);
   const [sidebarHover, setSidebarHover] = useState(false);
   const sidebarAberta = sidebarFixa || sidebarHover;
@@ -1284,31 +1310,30 @@ export default function DashboardAnalista() {
                                 )}
                               </div>
 
-                              {/* Dropdown de status rápido */}
-                              <div>
-                                {bs.length > 0 ? (
-                                  <select
-                                    value={statusUnico || ''}
-                                    onChange={(ev) => handleAplicarStatusEmTodos(emp.id, ev.target.value as StatusExtrato)}
-                                    className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-                                    title="Aplica o status escolhido a todos os bancos"
+                              {/* Status do mês atual */}
+                              <div className="flex justify-center">
+                                {bs.length === 0 ? (
+                                  <span className="badge badge-info text-[11px]">Sem bancos</span>
+                                ) : statusUnico ? (
+                                  <span
+                                    className={`badge text-[11px] ${
+                                      statusUnico === 'recebido' || statusUnico === 'importado'
+                                        ? 'badge-sucesso'
+                                        : statusUnico === 'solicitado'
+                                        ? 'badge-aviso'
+                                        : 'badge-neutro'
+                                    }`}
+                                    title={`Todos os ${bs.length} bancos: ${STATUS_EXT_LABEL[statusUnico]}`}
                                   >
-                                    <option value="" disabled>
-                                      {statusUnico ? STATUS_EXT_LABEL[statusUnico] : 'Vários status'}
-                                    </option>
-                                    <option value="pendente">Marcar todos: Pendente</option>
-                                    <option value="solicitado">Marcar todos: Solicitado</option>
-                                    <option value="recebido">Marcar todos: Recebido</option>
-                                    <option value="importado">Marcar todos: Importado</option>
-                                  </select>
+                                    {STATUS_EXT_LABEL[statusUnico]}
+                                  </span>
                                 ) : (
-                                  <select
-                                    disabled
-                                    className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-slate-50 text-slate-400 cursor-not-allowed"
-                                    title="Cadastre um banco antes de alterar o status"
+                                  <span
+                                    className="badge badge-aviso text-[11px]"
+                                    title="Bancos com status diferentes"
                                   >
-                                    <option>Sem bancos</option>
-                                  </select>
+                                    Vários status
+                                  </span>
                                 )}
                               </div>
 

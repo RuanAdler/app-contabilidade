@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
@@ -57,7 +57,15 @@ const STATUS_BADGE: Record<StatusEmpresa, string> = {
   suspensa: 'bg-amber-50 text-amber-800 border-amber-300',
 };
 
-export default function DashboardCoordenador() {
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><p className="text-sm text-slate-500">Carregando...</p></div>}>
+      <DashboardCoordenador />
+    </Suspense>
+  );
+}
+
+function DashboardCoordenador() {
   const [usuario, setUsuario] = useState<any>(null);
   const [analistas, setAnalistas] = useState<Analista[]>([]);
   const [empresas, setEmpresas] = useState<EmpresaComAnalista[]>([]);
@@ -70,7 +78,25 @@ export default function DashboardCoordenador() {
   const [filtroAnalista, setFiltroAnalista] = useState<string>('todos');
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos');
   const [loading, setLoading] = useState(true);
-  const [aba, setAba] = useState<Aba>('visao');
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const abaInicial = (searchParams.get('aba') as Aba) || 'visao';
+  const [aba, setAbaState] = useState<Aba>(abaInicial);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('aba') as Aba | null;
+    if (fromUrl && fromUrl !== aba) {
+      setAbaState(fromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const setAba = (nova: Aba) => {
+    setAbaState(nova);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('aba', nova);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
   const [sidebarFixa, setSidebarFixa] = useState(false);
   const [sidebarHover, setSidebarHover] = useState(false);
   const sidebarAberta = sidebarFixa || sidebarHover;
