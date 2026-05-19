@@ -101,6 +101,16 @@ export interface SessaoTrabalho {
   created_at: string;
 }
 
+export interface ProgressoRotina {
+  id: string;
+  empresa_id: string;
+  competencia: string;
+  tipo_rotina: string;
+  feito_em: string | null;
+  feito_por: string | null;
+  created_at: string;
+}
+
 export interface TarefaEmpresa {
   id: string;
   empresa_id: string;

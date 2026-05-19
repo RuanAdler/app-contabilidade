@@ -7,8 +7,16 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import {
   Empresa, ProgressoChecklist, EtapaChecklist, GrupoChecklist,
-  ObservacaoEmpresa, TarefaEmpresa,
+  ObservacaoEmpresa, TarefaEmpresa, ProgressoRotina,
 } from '@/lib/types';
+
+const ROTINAS_FIXAS: { id: string; label: string }[] = [
+  { id: 'integracao_fiscal', label: 'Integração fiscal' },
+  { id: 'integracao_folha', label: 'Integração folha' },
+  { id: 'conferencia_ecac', label: 'Conferência de guias no e-CAC' },
+  { id: 'conferencia_gpi', label: 'Conferência no portal GPI' },
+  { id: 'conferencia_despesas', label: 'Conferência despesas diversas' },
+];
 
 const GRUPO_LABEL: Record<GrupoChecklist, string> = {
   ativo: 'Ativo',
@@ -36,6 +44,7 @@ export default function EmpresaDetail() {
   const [salvandoTarefa, setSalvandoTarefa] = useState(false);
   const [obsEditandoId, setObsEditandoId] = useState<string | null>(null);
   const [obsRascunho, setObsRascunho] = useState('');
+  const [rotinas, setRotinas] = useState<ProgressoRotina[]>([]);
   const [obsGeralTexto, setObsGeralTexto] = useState('');
   const [salvandoObsGeral, setSalvandoObsGeral] = useState(false);
   const [aba, setAba] = useState<AbaEmpresa>('checklist');
@@ -107,20 +116,54 @@ export default function EmpresaDetail() {
 
   useEffect(() => {
     const carregar = async () => {
-      const [{ data: etapasData }, { data: progressoData }, { data: obsData }, { data: tarefasData }] = await Promise.all([
+      const [{ data: etapasData }, { data: progressoData }, { data: obsData }, { data: tarefasData }, { data: rotinasData }] = await Promise.all([
         supabase.from('etapas_checklist').select('*').order('ordem'),
         supabase.from('progresso_checklist').select('*').eq('empresa_id', empresaId).eq('competencia', competencia),
         supabase.from('observacoes_empresa').select('*').eq('empresa_id', empresaId).eq('competencia', competencia).maybeSingle(),
         supabase.from('tarefas_empresa').select('*').in('empresa_id', [empresaId]).eq('competencia', competencia).order('feita').order('prazo', { nullsFirst: false }),
+        supabase.from('progresso_rotinas').select('*').eq('empresa_id', empresaId).eq('competencia', competencia),
       ]);
       setEtapas(etapasData || []);
       setChecklist(progressoData || []);
       setObservacao(obsData || null);
       setObsTexto(obsData?.texto || '');
       setTarefas(tarefasData || []);
+      setRotinas(rotinasData || []);
     };
     carregar();
   }, [empresaId, competencia]);
+
+  const handleToggleRotina = async (tipo: string, feito: boolean) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const agora = new Date().toISOString();
+    const existente = rotinas.find((r) => r.tipo_rotina === tipo);
+
+    if (existente) {
+      const { data } = await supabase
+        .from('progresso_rotinas')
+        .update({
+          feito_em: feito ? agora : null,
+          feito_por: feito ? (user?.email || null) : null,
+        })
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (data) setRotinas((prev) => prev.map((r) => (r.id === existente.id ? data : r)));
+    } else {
+      const { data } = await supabase
+        .from('progresso_rotinas')
+        .insert({
+          empresa_id: empresaId,
+          competencia,
+          tipo_rotina: tipo,
+          feito_em: feito ? agora : null,
+          feito_por: feito ? (user?.email || null) : null,
+        })
+        .select()
+        .single();
+      if (data) setRotinas((prev) => [...prev, data]);
+    }
+  };
 
   const handleChecklistChange = async (etapaId: string, feito: boolean) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -654,6 +697,50 @@ export default function EmpresaDetail() {
                 })}
               </div>
             )}
+          </section>
+
+          {/* Rotinas mensais fixas */}
+          <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+            <header className="px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                  Rotinas mensais
+                </h2>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Tarefas recorrentes que se aplicam a toda empresa em {competencia}.
+                </p>
+              </div>
+              <span className="text-[11px] font-medium text-slate-500 tabular-nums">
+                {rotinas.filter((r) => r.feito_em).length}/{ROTINAS_FIXAS.length}
+              </span>
+            </header>
+            <div className="px-3 py-3 flex flex-wrap gap-1.5">
+              {ROTINAS_FIXAS.map((rotina) => {
+                const registro = rotinas.find((r) => r.tipo_rotina === rotina.id);
+                const feito = !!registro?.feito_em;
+                return (
+                  <label
+                    key={rotina.id}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs cursor-pointer transition ${
+                      feito
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800 line-through'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title={feito && registro?.feito_em
+                      ? `Concluído em ${new Date(registro.feito_em).toLocaleDateString('pt-BR')}${registro.feito_por ? ` por ${registro.feito_por}` : ''}`
+                      : 'Clique para marcar como concluído'}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={feito}
+                      onChange={(e) => handleToggleRotina(rotina.id, e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                    />
+                    <span className="font-medium">{rotina.label}</span>
+                  </label>
+                );
+              })}
+            </div>
           </section>
 
           {/* Tarefas */}
