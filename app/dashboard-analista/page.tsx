@@ -1310,30 +1310,25 @@ function DashboardAnalista() {
                                 )}
                               </div>
 
-                              {/* Status do mês atual */}
-                              <div className="flex justify-center">
-                                {bs.length === 0 ? (
-                                  <span className="badge badge-info text-[11px]">Sem bancos</span>
-                                ) : statusUnico ? (
-                                  <span
-                                    className={`badge text-[11px] ${
-                                      statusUnico === 'recebido' || statusUnico === 'importado'
-                                        ? 'badge-sucesso'
-                                        : statusUnico === 'solicitado'
-                                        ? 'badge-aviso'
-                                        : 'badge-neutro'
-                                    }`}
-                                    title={`Todos os ${bs.length} bancos: ${STATUS_EXT_LABEL[statusUnico]}`}
+                              {/* Status do mês selecionado (dropdown rápido) */}
+                              <div>
+                                {bs.length > 0 ? (
+                                  <select
+                                    value={statusUnico || ''}
+                                    onChange={(ev) => handleAplicarStatusEmTodos(emp.id, ev.target.value as StatusExtrato)}
+                                    className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                    title={`Aplica o status a todos os bancos para a competência ${extrCompetencia}`}
                                   >
-                                    {STATUS_EXT_LABEL[statusUnico]}
-                                  </span>
+                                    <option value="" disabled>
+                                      {statusUnico ? STATUS_EXT_LABEL[statusUnico] : 'Vários status'}
+                                    </option>
+                                    <option value="pendente">Marcar todos: Pendente</option>
+                                    <option value="solicitado">Marcar todos: Solicitado</option>
+                                    <option value="recebido">Marcar todos: Recebido</option>
+                                    <option value="importado">Marcar todos: Importado</option>
+                                  </select>
                                 ) : (
-                                  <span
-                                    className="badge badge-aviso text-[11px]"
-                                    title="Bancos com status diferentes"
-                                  >
-                                    Vários status
-                                  </span>
+                                  <span className="text-[11px] text-slate-400 italic">—</span>
                                 )}
                               </div>
 
