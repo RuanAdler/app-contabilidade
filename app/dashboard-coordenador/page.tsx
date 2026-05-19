@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, SessaoTrabalho } from '@/lib/types';
+import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, SessaoTrabalho, TarefaEmpresa } from '@/lib/types';
 
 function formatarDuracao(segundos: number): string {
   if (!segundos || segundos < 0) return '0min';
@@ -17,7 +17,6 @@ function formatarDuracao(segundos: number): string {
 }
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
-type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroStatus = 'todos' | StatusEmpresa;
 type StatusMes = 'sem_bancos' | 'concluido' | 'parcial' | 'pendente';
 type Aba = 'visao' | 'controle' | 'desempenho' | 'help' | 'relatorios';
@@ -67,7 +66,6 @@ export default function DashboardCoordenador() {
   const [totalEtapas, setTotalEtapas] = useState(0);
   const [busca, setBusca] = useState('');
   const [filtroAnalista, setFiltroAnalista] = useState<string>('todos');
-  const [filtroEnvio, setFiltroEnvio] = useState<FiltroEnvio>('todas');
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos');
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState<Aba>('visao');
@@ -79,6 +77,8 @@ export default function DashboardCoordenador() {
   const [solucaoRascunho, setSolucaoRascunho] = useState<Record<string, string>>({});
   const [sessoesMes, setSessoesMes] = useState<SessaoTrabalho[]>([]);
   const [tickAgora, setTickAgora] = useState(Date.now());
+  const [tarefasMes, setTarefasMes] = useState<TarefaEmpresa[]>([]);
+  const [mostrarMaisAtencao, setMostrarMaisAtencao] = useState(false);
 
   // Filtros dos relatórios
   const [relExtrCompetencia, setRelExtrCompetencia] = useState(COMPETENCIA_ATUAL);
@@ -189,6 +189,12 @@ export default function DashboardCoordenador() {
         .select('*')
         .eq('competencia', COMPETENCIA_ATUAL);
       setSessoesMes(sessoesData || []);
+
+      const { data: tarefasData } = await supabase
+        .from('tarefas_empresa')
+        .select('*')
+        .eq('competencia', COMPETENCIA_ATUAL);
+      setTarefasMes(tarefasData || []);
 
       setLoading(false);
     };
@@ -313,23 +319,6 @@ export default function DashboardCoordenador() {
       .sort((a, b) => b.prioridade - a.prioridade || a.empresa.nome.localeCompare(b.empresa.nome));
   }, [empresasAtivas, bancosPorEmpresa, extratoPorBanco]);
 
-  // Visão operacional (Visão geral) — só ativas
-  const empresasFiltradasVisao = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return empresasAtivas.filter((e) => {
-      const passaAnalista = filtroAnalista === 'todos' || e.analista_id === filtroAnalista;
-      const passaBusca =
-        !termo ||
-        e.nome.toLowerCase().includes(termo) ||
-        e.analista_nome.toLowerCase().includes(termo);
-      const passaEnvio =
-        filtroEnvio === 'todas' ||
-        (filtroEnvio === 'regulares' && !e.nao_envia_extratos) ||
-        (filtroEnvio === 'nao_envia' && e.nao_envia_extratos);
-      return passaAnalista && passaBusca && passaEnvio;
-    });
-  }, [empresasAtivas, busca, filtroAnalista, filtroEnvio]);
-
   // Controle de empresas — todas, com filtro de status
   const empresasFiltradasControle = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -446,6 +435,30 @@ export default function DashboardCoordenador() {
     () => analistas.reduce((sum, a) => sum + tempoAnalistaMes(a.email), 0),
     [analistas, sessoesMes, tickAgora]
   );
+
+  // Quem está trabalhando agora (sessão ativa)
+  const trabalhandoAgora = useMemo(() => {
+    const ativos = sessoesMes.filter((s) => !s.fim_em);
+    const map: Record<string, { analista: Analista | undefined; empresa: EmpresaComAnalista | undefined; inicio: string }> = {};
+    for (const s of ativos) {
+      const analista = analistas.find((a) => a.email === s.analista_email);
+      const empresa = empresas.find((e) => e.id === s.empresa_id);
+      map[s.analista_email] = { analista, empresa, inicio: s.inicio_em };
+    }
+    return Object.values(map);
+  }, [sessoesMes, analistas, empresas]);
+
+  // Tarefas atrasadas da equipe (na competência atual)
+  const tarefasAtrasadasEquipe = useMemo(() => {
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    return tarefasMes
+      .filter((t) => !t.feita && t.prazo && t.prazo < hojeStr)
+      .map((t) => ({
+        tarefa: t,
+        empresa: empresas.find((e) => e.id === t.empresa_id),
+      }))
+      .filter((x) => x.empresa && x.empresa.status === 'ativa');
+  }, [tarefasMes, empresas]);
 
   const topEmpresasTempo = useMemo(() => {
     return empresasAtivas
@@ -791,66 +804,168 @@ export default function DashboardCoordenador() {
                 </div>
               </div>
 
+              {/* === SEÇÃO HOJE === */}
               <section className="mb-8">
                 <header className="mb-3">
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                    Desempenho por analista
+                    Hoje
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Progresso dos balanços (checklist) na competência atual.
+                    O que precisa da sua atenção agora.
                   </p>
                 </header>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {statsPorAnalista.map((s) => (
-                    <div key={s.analista.id} className="bg-white border border-slate-200 rounded-md p-5 shadow-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{s.analista.nome}</p>
-                          <p className="text-xs text-slate-500">{s.total} empresas na carteira</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-semibold text-slate-900">{s.percentConcluido}%</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">concluídos</p>
-                        </div>
-                      </div>
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
-                        <div
-                          className={`h-full transition-all ${
-                            s.percentConcluido >= 80 ? 'bg-emerald-500'
-                            : s.percentConcluido >= 50 ? 'bg-amber-500'
-                            : 'bg-red-500'
-                          }`}
-                          style={{ width: `${s.percentConcluido}%` }}
-                        />
-                      </div>
-                      <div className="grid grid-cols-4 gap-2 text-center">
-                        <div>
-                          <p className="text-sm font-semibold text-emerald-700">{s.concluidas}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Concl.</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-amber-700">{s.parciais}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Em and.</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-red-700">{s.pendentes}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Não inic.</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-500">{s.naoEnvia}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">N/Env.</p>
-                        </div>
-                      </div>
-                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                        <span className="text-slate-500 uppercase tracking-wider">
-                          Tempo no mês
-                        </span>
-                        <span className="font-mono font-semibold text-slate-700 tabular-nums">
-                          {formatarDuracao(tempoAnalistaMes(s.analista.email))}
-                        </span>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Trabalhando agora */}
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        Trabalhando agora
+                      </p>
+                      <span className="text-xl font-semibold text-slate-900">{trabalhandoAgora.length}</span>
                     </div>
-                  ))}
+                    {trabalhandoAgora.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">Ninguém com sessão ativa.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {trabalhandoAgora.map((t, i) => (
+                          <li key={i} className="text-xs flex items-baseline gap-1.5">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mt-1 shrink-0" />
+                            <span className="font-medium text-slate-900">{t.analista?.nome || t.empresa?.analista_nome || '—'}</span>
+                            <span className="text-slate-500 truncate">
+                              em {t.empresa ? (
+                                <Link href={`/empresa/${t.empresa.id}`} className="hover:underline">{t.empresa.nome}</Link>
+                              ) : '—'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Helps urgentes */}
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        Helps urgentes
+                      </p>
+                      <span className={`text-xl font-semibold ${helpsUrgentes > 0 ? 'text-red-700' : 'text-slate-900'}`}>
+                        {helpsUrgentes}
+                      </span>
+                    </div>
+                    {helpsUrgentes === 0 ? (
+                      <p className="text-xs text-slate-400 italic">
+                        {helpsPendentes > 0 ? `${helpsPendentes} pendente${helpsPendentes === 1 ? '' : 's'}, nada urgente.` : 'Nenhum pedido aberto.'}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-600">
+                        {helpsUrgentes} pedido{helpsUrgentes === 1 ? '' : 's'} parado{helpsUrgentes === 1 ? '' : 's'} há mais de 24h.
+                        {' '}
+                        <button
+                          onClick={() => { setAba('help'); }}
+                          className="text-red-700 font-semibold hover:underline"
+                        >
+                          Ver agora →
+                        </button>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Tarefas atrasadas */}
+                  <div className="bg-white border border-slate-200 rounded-md p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        Tarefas atrasadas
+                      </p>
+                      <span className={`text-xl font-semibold ${tarefasAtrasadasEquipe.length > 0 ? 'text-red-700' : 'text-slate-900'}`}>
+                        {tarefasAtrasadasEquipe.length}
+                      </span>
+                    </div>
+                    {tarefasAtrasadasEquipe.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">Nenhuma tarefa atrasada.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {tarefasAtrasadasEquipe.slice(0, 3).map(({ tarefa, empresa }) => (
+                          <li key={tarefa.id} className="text-xs truncate">
+                            <Link href={`/empresa/${empresa!.id}`} className="text-slate-700 hover:underline">
+                              {empresa!.nome}
+                            </Link>
+                            <span className="text-slate-500 mx-1">·</span>
+                            <span className="text-slate-500">{tarefa.titulo}</span>
+                          </li>
+                        ))}
+                        {tarefasAtrasadasEquipe.length > 3 && (
+                          <li className="text-[11px] text-slate-400 pt-0.5">
+                            + {tarefasAtrasadasEquipe.length - 3} outra{tarefasAtrasadasEquipe.length - 3 === 1 ? '' : 's'}
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* === DESEMPENHO POR ANALISTA — versão compacta === */}
+              <section className="mb-8">
+                <header className="mb-3 flex items-baseline justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                      Desempenho por analista
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Resumo da competência. Para detalhes, vá em <button onClick={() => setAba('desempenho')} className="text-slate-700 hover:underline font-medium">Desempenho da equipe</button>.
+                    </p>
+                  </div>
+                </header>
+                <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Analista</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Balanços</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Em atenção</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Tempo no mês</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statsPorAnalista.map((s, idx) => (
+                        <tr
+                          key={s.analista.id}
+                          className={`border-b border-slate-100 ${idx === statsPorAnalista.length - 1 ? 'border-b-0' : ''}`}
+                        >
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-semibold text-slate-900">{s.analista.nome}</p>
+                            <p className="text-[11px] text-slate-500">{s.total} empresas</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all ${
+                                    s.percentConcluido >= 80 ? 'bg-emerald-500'
+                                    : s.percentConcluido >= 50 ? 'bg-amber-500'
+                                    : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${s.percentConcluido}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-semibold text-slate-900 tabular-nums">{s.percentConcluido}%</span>
+                              <span className="text-[11px] text-slate-500">({s.concluidas}/{s.total})</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-sm font-semibold ${(atencaoPorAnalista[s.analista.id]?.length || 0) > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
+                              {atencaoPorAnalista[s.analista.id]?.length || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="font-mono text-sm font-semibold text-slate-700 tabular-nums">
+                              {formatarDuracao(tempoAnalistaMes(s.analista.email))}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </section>
 
@@ -884,7 +999,7 @@ export default function DashboardCoordenador() {
                         </tr>
                       </thead>
                       <tbody>
-                        {empresasAtencao.slice(0, 20).map((item, idx, arr) => (
+                        {empresasAtencao.slice(0, mostrarMaisAtencao ? 30 : 5).map((item, idx, arr) => (
                           <tr
                             key={item.empresa.id}
                             className={`border-b border-slate-100 hover:bg-slate-50 ${
@@ -916,10 +1031,15 @@ export default function DashboardCoordenador() {
                         ))}
                       </tbody>
                     </table>
-                    {empresasAtencao.length > 20 && (
-                      <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 text-center">
-                        Exibindo as 20 mais críticas de {empresasAtencao.length}.
-                      </div>
+                    {empresasAtencao.length > 5 && (
+                      <button
+                        onClick={() => setMostrarMaisAtencao(!mostrarMaisAtencao)}
+                        className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border-t border-slate-200 text-xs font-medium text-slate-700 transition"
+                      >
+                        {mostrarMaisAtencao
+                          ? 'Mostrar menos'
+                          : `Ver mais (${Math.min(empresasAtencao.length - 5, 25)} ${empresasAtencao.length - 5 === 1 ? 'empresa' : 'empresas'})`}
+                      </button>
                     )}
                   </div>
                 )}
@@ -992,99 +1112,17 @@ export default function DashboardCoordenador() {
                 </section>
               )}
 
-              <section>
-                <header className="mb-3">
-                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                    Carteira ativa
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Empresas ativas. Para ver baixadas/suspensas, vá em "Controle de empresas".
-                  </p>
-                </header>
-                <div className="bg-white border border-slate-200 rounded-md shadow-sm">
-                  <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_200px_220px] gap-3">
-                    <div className="relative">
-                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-                      </svg>
-                      <input
-                        type="text"
-                        value={busca}
-                        onChange={(e) => setBusca(e.target.value)}
-                        placeholder="Pesquisar por empresa ou analista..."
-                        className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
-                      />
-                    </div>
-                    <select
-                      value={filtroAnalista}
-                      onChange={(e) => setFiltroAnalista(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
-                    >
-                      <option value="todos">Todos os analistas</option>
-                      {analistas.map((a) => (
-                        <option key={a.id} value={a.id}>{a.nome}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={filtroEnvio}
-                      onChange={(e) => setFiltroEnvio(e.target.value as FiltroEnvio)}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
-                    >
-                      <option value="todas">Todas as empresas</option>
-                      <option value="regulares">Apenas regulares</option>
-                      <option value="nao_envia">Apenas "não envia"</option>
-                    </select>
-                  </div>
-                  {empresasFiltradasVisao.length === 0 ? (
-                    <div className="p-10 text-center">
-                      <p className="text-sm text-slate-500">Nenhuma empresa encontrada.</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Empresa</th>
-                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Analista</th>
-                            <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Situação</th>
-                            <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">Ação</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {empresasFiltradasVisao.map((empresa, idx) => (
-                            <tr
-                              key={empresa.id}
-                              className={`border-b border-slate-100 hover:bg-slate-50 ${
-                                idx === empresasFiltradasVisao.length - 1 ? 'border-b-0' : ''
-                              }`}
-                            >
-                              <td className="px-4 py-3 text-slate-900 font-medium">{empresa.nome}</td>
-                              <td className="px-4 py-3 text-slate-600">{empresa.analista_nome}</td>
-                              <td className="px-4 py-3">
-                                {empresa.nao_envia_extratos ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
-                                    Não envia extratos
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-slate-400">—</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <Link
-                                  href={`/empresa/${empresa.id}`}
-                                  className="inline-block text-xs font-medium text-slate-700 hover:text-slate-900 border border-slate-300 hover:border-slate-400 rounded px-3 py-1.5 transition"
-                                >
-                                  Abrir
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </section>
+              <div className="mt-8 bg-slate-50 border border-slate-200 rounded-md p-4 text-center">
+                <p className="text-xs text-slate-500">
+                  Quer ver a carteira completa, gerenciar empresas, baixadas ou suspensas?
+                </p>
+                <button
+                  onClick={() => setAba('controle')}
+                  className="mt-2 text-sm font-medium text-slate-700 hover:text-slate-900 underline"
+                >
+                  Ir para Controle de empresas →
+                </button>
+              </div>
             </>
           )}
 
