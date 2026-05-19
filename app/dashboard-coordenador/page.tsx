@@ -5,16 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, SessaoTrabalho, TarefaEmpresa } from '@/lib/types';
-
-function formatarDuracao(segundos: number): string {
-  if (!segundos || segundos < 0) return '0min';
-  const h = Math.floor(segundos / 3600);
-  const m = Math.floor((segundos % 3600) / 60);
-  if (h === 0) return `${m}min`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}min`;
-}
+import { Empresa, Analista, BancoEmpresa, SolicitacaoExtrato, ProgressoChecklist, StatusEmpresa, PedidoHelp, TarefaEmpresa, ObservacaoEmpresa } from '@/lib/types';
 
 type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroStatus = 'todos' | StatusEmpresa;
@@ -75,9 +66,8 @@ export default function DashboardCoordenador() {
   const [analistaDetalhado, setAnalistaDetalhado] = useState<string | null>(null);
   const [pedidosHelp, setPedidosHelp] = useState<PedidoHelp[]>([]);
   const [solucaoRascunho, setSolucaoRascunho] = useState<Record<string, string>>({});
-  const [sessoesMes, setSessoesMes] = useState<SessaoTrabalho[]>([]);
-  const [tickAgora, setTickAgora] = useState(Date.now());
   const [tarefasMes, setTarefasMes] = useState<TarefaEmpresa[]>([]);
+  const [observacoesMes, setObservacoesMes] = useState<ObservacaoEmpresa[]>([]);
   const [mostrarMaisAtencao, setMostrarMaisAtencao] = useState(false);
 
   // Filtros dos relatórios
@@ -184,17 +174,17 @@ export default function DashboardCoordenador() {
         .order('created_at', { ascending: false });
       setPedidosHelp(helpData || []);
 
-      const { data: sessoesData } = await supabase
-        .from('sessoes_trabalho')
-        .select('*')
-        .eq('competencia', COMPETENCIA_ATUAL);
-      setSessoesMes(sessoesData || []);
-
       const { data: tarefasData } = await supabase
         .from('tarefas_empresa')
         .select('*')
         .eq('competencia', COMPETENCIA_ATUAL);
       setTarefasMes(tarefasData || []);
+
+      const { data: obsData } = await supabase
+        .from('observacoes_empresa')
+        .select('*')
+        .eq('competencia', COMPETENCIA_ATUAL);
+      setObservacoesMes(obsData || []);
 
       setLoading(false);
     };
@@ -397,56 +387,103 @@ export default function DashboardCoordenador() {
   const totalSuspensas = empresas.filter((e) => e.status === 'suspensa').length;
   const totalNaoEnvia = empresasAtivas.filter((e) => e.nao_envia_extratos).length;
 
-  // ====== Sessões de trabalho ======
-  useEffect(() => {
-    const algumaAberta = sessoesMes.some((s) => !s.fim_em);
-    if (!algumaAberta) return;
-    const interval = setInterval(() => setTickAgora(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [sessoesMes]);
+  // ====== Métricas de atividade ======
+  const inicioHojeMs = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
 
-  const tempoEmpresaMes = (empresaId: string): number => {
-    const sessoesEmp = sessoesMes.filter((s) => s.empresa_id === empresaId);
-    let total = 0;
-    for (const s of sessoesEmp) {
-      if (s.fim_em) {
-        total += s.duracao_segundos || 0;
-      } else {
-        total += Math.max(0, Math.floor((tickAgora - new Date(s.inicio_em).getTime()) / 1000));
+  // Empresas únicas que cada analista tocou HOJE
+  // (marcou conta no checklist, criou tarefa ou atualizou observação)
+  const atividadeHojePorAnalista = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    analistas.forEach((a) => { map[a.email] = new Set(); });
+
+    // Checklist marcado hoje
+    for (const c of checklist6m) {
+      if (!c.feito_em || !c.feito_por) continue;
+      if (new Date(c.feito_em).getTime() < inicioHojeMs) continue;
+      if (map[c.feito_por]) map[c.feito_por].add(c.empresa_id);
+    }
+    // Tarefas criadas hoje
+    for (const t of tarefasMes) {
+      if (!t.created_by || !t.created_at) continue;
+      if (new Date(t.created_at).getTime() < inicioHojeMs) continue;
+      if (map[t.created_by]) map[t.created_by].add(t.empresa_id);
+    }
+    // Tarefas concluídas hoje
+    for (const t of tarefasMes) {
+      if (!t.feita || !t.feita_em || !t.feita_por) continue;
+      if (new Date(t.feita_em).getTime() < inicioHojeMs) continue;
+      if (map[t.feita_por]) map[t.feita_por].add(t.empresa_id);
+    }
+    // Observações atualizadas hoje
+    for (const o of observacoesMes) {
+      if (!o.updated_at || !o.updated_by) continue;
+      if (new Date(o.updated_at).getTime() < inicioHojeMs) continue;
+      if (map[o.updated_by]) map[o.updated_by].add(o.empresa_id);
+    }
+    return map;
+  }, [analistas, checklist6m, tarefasMes, observacoesMes, inicioHojeMs]);
+
+  // Velocidade média de fechamento — dias entre 1ª marcação e 100% concluído
+  const velocidadePorAnalista = useMemo(() => {
+    const map: Record<string, { diasMedia: number; concluidasComData: number }> = {};
+    if (totalEtapas === 0) {
+      analistas.forEach((a) => { map[a.email] = { diasMedia: 0, concluidasComData: 0 }; });
+      return map;
+    }
+    for (const a of analistas) {
+      const empresasDoAnalista = empresasAtivas.filter((e) => e.analista_id === a.id);
+      const diasArray: number[] = [];
+      for (const emp of empresasDoAnalista) {
+        const progressosEmp = checklist6m.filter(
+          (c) => c.empresa_id === emp.id && c.competencia === COMPETENCIA_ATUAL && c.feito_em
+        );
+        if (progressosEmp.length < totalEtapas) continue;
+        const datas = progressosEmp
+          .map((c) => new Date(c.feito_em!).getTime())
+          .sort((x, y) => x - y);
+        const primeira = datas[0];
+        const ultima = datas[datas.length - 1];
+        const dias = Math.max(1, Math.ceil((ultima - primeira) / (1000 * 60 * 60 * 24)));
+        diasArray.push(dias);
+      }
+      const media = diasArray.length > 0
+        ? Math.round((diasArray.reduce((s, d) => s + d, 0) / diasArray.length) * 10) / 10
+        : 0;
+      map[a.email] = { diasMedia: media, concluidasComData: diasArray.length };
+    }
+    return map;
+  }, [analistas, empresasAtivas, checklist6m, totalEtapas]);
+
+  // Empresas mais ativas no mês — contagem de eventos
+  const topEmpresasAtivas = useMemo(() => {
+    const eventos: Record<string, number> = {};
+    for (const c of checklist6m) {
+      if (c.competencia !== COMPETENCIA_ATUAL || !c.feito_em) continue;
+      eventos[c.empresa_id] = (eventos[c.empresa_id] || 0) + 1;
+    }
+    for (const t of tarefasMes) {
+      eventos[t.empresa_id] = (eventos[t.empresa_id] || 0) + 1;
+    }
+    for (const o of observacoesMes) {
+      if (o.texto && o.texto.trim().length > 0) {
+        eventos[o.empresa_id] = (eventos[o.empresa_id] || 0) + 1;
       }
     }
-    return total;
-  };
-
-  const tempoAnalistaMes = (analistaEmail: string): number => {
-    const sessoesAna = sessoesMes.filter((s) => s.analista_email === analistaEmail);
-    let total = 0;
-    for (const s of sessoesAna) {
-      if (s.fim_em) {
-        total += s.duracao_segundos || 0;
-      } else {
-        total += Math.max(0, Math.floor((tickAgora - new Date(s.inicio_em).getTime()) / 1000));
-      }
+    for (const e of extratos) {
+      eventos[bancos.find((b) => b.id === e.banco_id)?.empresa_id || ''] =
+        (eventos[bancos.find((b) => b.id === e.banco_id)?.empresa_id || ''] || 0) + (e.qtd_solicitacoes || 0);
     }
-    return total;
-  };
-
-  const tempoTotalEquipe = useMemo(
-    () => analistas.reduce((sum, a) => sum + tempoAnalistaMes(a.email), 0),
-    [analistas, sessoesMes, tickAgora]
-  );
-
-  // Quem está trabalhando agora (sessão ativa)
-  const trabalhandoAgora = useMemo(() => {
-    const ativos = sessoesMes.filter((s) => !s.fim_em);
-    const map: Record<string, { analista: Analista | undefined; empresa: EmpresaComAnalista | undefined; inicio: string }> = {};
-    for (const s of ativos) {
-      const analista = analistas.find((a) => a.email === s.analista_email);
-      const empresa = empresas.find((e) => e.id === s.empresa_id);
-      map[s.analista_email] = { analista, empresa, inicio: s.inicio_em };
-    }
-    return Object.values(map);
-  }, [sessoesMes, analistas, empresas]);
+    delete eventos[''];
+    return empresasAtivas
+      .map((emp) => ({ empresa: emp, eventos: eventos[emp.id] || 0 }))
+      .filter((x) => x.eventos > 0)
+      .sort((a, b) => b.eventos - a.eventos)
+      .slice(0, 10);
+  }, [empresasAtivas, checklist6m, tarefasMes, observacoesMes, extratos, bancos]);
 
   // Tarefas atrasadas da equipe (na competência atual)
   const tarefasAtrasadasEquipe = useMemo(() => {
@@ -459,14 +496,6 @@ export default function DashboardCoordenador() {
       }))
       .filter((x) => x.empresa && x.empresa.status === 'ativa');
   }, [tarefasMes, empresas]);
-
-  const topEmpresasTempo = useMemo(() => {
-    return empresasAtivas
-      .map((emp) => ({ empresa: emp, segundos: tempoEmpresaMes(emp.id) }))
-      .filter((x) => x.segundos > 0)
-      .sort((a, b) => b.segundos - a.segundos)
-      .slice(0, 10);
-  }, [empresasAtivas, sessoesMes, tickAgora]);
 
   // ====== Helps ======
   const HORAS_24 = 24 * 60 * 60 * 1000;
@@ -790,10 +819,16 @@ export default function DashboardCoordenador() {
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
                   <p className="label-tiny">
-                    Tempo da equipe
+                    Concluídas no mês
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums">
-                    {formatarDuracao(tempoTotalEquipe)}
+                  <p className="mt-2 text-2xl font-semibold text-emerald-700">
+                    {empresasAtivas.filter((e) => {
+                      if (totalEtapas === 0) return false;
+                      const feitos = checklist6m.filter(
+                        (c) => c.empresa_id === e.id && c.competencia === COMPETENCIA_ATUAL && c.feito_em
+                      ).length;
+                      return feitos === totalEtapas;
+                    }).length}
                   </p>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-md p-4">
@@ -815,29 +850,31 @@ export default function DashboardCoordenador() {
                   </p>
                 </header>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Trabalhando agora */}
+                  {/* Atividade hoje */}
                   <div className="bg-white border border-slate-200 rounded-md p-4">
                     <div className="flex items-center justify-between mb-2">
                       <p className="label-tiny">
-                        Trabalhando agora
+                        Atividade hoje
                       </p>
-                      <span className="text-xl font-semibold text-slate-900">{trabalhandoAgora.length}</span>
+                      <span className="text-xl font-semibold text-slate-900">
+                        {analistas.reduce((sum, a) => sum + (atividadeHojePorAnalista[a.email]?.size || 0), 0)}
+                      </span>
                     </div>
-                    {trabalhandoAgora.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">Ninguém com sessão ativa.</p>
+                    {analistas.every((a) => (atividadeHojePorAnalista[a.email]?.size || 0) === 0) ? (
+                      <p className="text-xs text-slate-400 italic">Nenhum analista mexeu em empresas hoje.</p>
                     ) : (
-                      <ul className="space-y-1.5">
-                        {trabalhandoAgora.map((t, i) => (
-                          <li key={i} className="text-xs flex items-baseline gap-1.5">
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mt-1 shrink-0" />
-                            <span className="font-medium text-slate-900">{t.analista?.nome || t.empresa?.analista_nome || '—'}</span>
-                            <span className="text-slate-500 truncate">
-                              em {t.empresa ? (
-                                <Link href={`/empresa/${t.empresa.id}`} className="hover:underline">{t.empresa.nome}</Link>
-                              ) : '—'}
-                            </span>
-                          </li>
-                        ))}
+                      <ul className="space-y-1">
+                        {analistas.map((a) => {
+                          const qtd = atividadeHojePorAnalista[a.email]?.size || 0;
+                          return (
+                            <li key={a.id} className="text-xs flex items-baseline justify-between gap-1.5">
+                              <span className="font-medium text-slate-900 truncate">{a.nome}</span>
+                              <span className={`tabular-nums ${qtd > 0 ? 'text-slate-700 font-semibold' : 'text-slate-400'}`}>
+                                {qtd} empresa{qtd === 1 ? '' : 's'}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -923,11 +960,13 @@ export default function DashboardCoordenador() {
                         <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Analista</th>
                         <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Balanços</th>
                         <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Em atenção</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Tempo no mês</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Velocidade média</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {statsPorAnalista.map((s, idx) => (
+                      {statsPorAnalista.map((s, idx) => {
+                        const vel = velocidadePorAnalista[s.analista.email];
+                        return (
                         <tr
                           key={s.analista.id}
                           className={`border-b border-slate-100 ${idx === statsPorAnalista.length - 1 ? 'border-b-0' : ''}`}
@@ -958,12 +997,17 @@ export default function DashboardCoordenador() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="font-mono text-sm font-semibold text-slate-700 tabular-nums">
-                              {formatarDuracao(tempoAnalistaMes(s.analista.email))}
-                            </span>
+                            {vel && vel.concluidasComData > 0 ? (
+                              <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                                {vel.diasMedia} {vel.diasMedia === 1 ? 'dia' : 'dias'}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1045,15 +1089,15 @@ export default function DashboardCoordenador() {
                 )}
               </section>
 
-              {topEmpresasTempo.length > 0 && (
+              {topEmpresasAtivas.length > 0 && (
                 <section className="mb-8">
                   <header className="mb-3 flex items-baseline justify-between">
                     <div>
                       <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                        Empresas com mais tempo investido · {NOME_MES}
+                        Empresas mais ativas · {NOME_MES}
                       </h2>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        Top 10 empresas que mais demandaram tempo da equipe.
+                        Top 10 empresas com mais eventos no mês (marcações de checklist, tarefas, observações, cobranças).
                       </p>
                     </div>
                   </header>
@@ -1064,19 +1108,19 @@ export default function DashboardCoordenador() {
                           <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600 w-8">#</th>
                           <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Empresa</th>
                           <th className="text-left px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Analista</th>
-                          <th className="text-right px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Tempo</th>
+                          <th className="text-right px-4 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Eventos</th>
                           <th className="px-4 py-2.5 w-20"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {topEmpresasTempo.map((item, idx) => {
-                          const maxSegundos = topEmpresasTempo[0].segundos;
-                          const proporcao = maxSegundos > 0 ? (item.segundos / maxSegundos) * 100 : 0;
+                        {topEmpresasAtivas.map((item, idx) => {
+                          const maxEventos = topEmpresasAtivas[0].eventos;
+                          const proporcao = maxEventos > 0 ? (item.eventos / maxEventos) * 100 : 0;
                           return (
                             <tr
                               key={item.empresa.id}
                               className={`border-b border-slate-100 hover:bg-slate-50 ${
-                                idx === topEmpresasTempo.length - 1 ? 'border-b-0' : ''
+                                idx === topEmpresasAtivas.length - 1 ? 'border-b-0' : ''
                               }`}
                             >
                               <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{idx + 1}</td>
@@ -1090,8 +1134,8 @@ export default function DashboardCoordenador() {
                                       style={{ width: `${proporcao}%` }}
                                     />
                                   </div>
-                                  <span className="font-mono font-semibold text-slate-900 tabular-nums text-xs min-w-[60px] text-right">
-                                    {formatarDuracao(item.segundos)}
+                                  <span className="font-semibold text-slate-900 tabular-nums text-xs min-w-[40px] text-right">
+                                    {item.eventos}
                                   </span>
                                 </div>
                               </td>

@@ -7,18 +7,8 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import {
   Empresa, ProgressoChecklist, EtapaChecklist, GrupoChecklist,
-  ObservacaoEmpresa, TarefaEmpresa, SessaoTrabalho,
+  ObservacaoEmpresa, TarefaEmpresa,
 } from '@/lib/types';
-
-function formatarDuracao(segundos: number): string {
-  if (!segundos || segundos < 0) return '0min';
-  const h = Math.floor(segundos / 3600);
-  const m = Math.floor((segundos % 3600) / 60);
-  const s = segundos % 60;
-  if (h > 0) return `${h}h ${m}min`;
-  if (m > 0) return `${m}min ${s}s`;
-  return `${s}s`;
-}
 
 const GRUPO_LABEL: Record<GrupoChecklist, string> = {
   ativo: 'Ativo',
@@ -52,15 +42,6 @@ export default function EmpresaDetail() {
   const [sidebarFixa, setSidebarFixa] = useState(false);
   const [sidebarHover, setSidebarHover] = useState(false);
   const sidebarAberta = sidebarFixa || sidebarHover;
-
-  // Sessões de trabalho
-  const [sessaoAtiva, setSessaoAtiva] = useState<SessaoTrabalho | null>(null);
-  const [sessoesMes, setSessoesMes] = useState<SessaoTrabalho[]>([]);
-  const [tickAgora, setTickAgora] = useState<number>(Date.now());
-  const [modalPausaAberto, setModalPausaAberto] = useState(false);
-  const [motivoPausa, setMotivoPausa] = useState('');
-  const [pausando, setPausando] = useState(false);
-  const [iniciando, setIniciando] = useState(false);
 
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
@@ -108,120 +89,6 @@ export default function EmpresaDetail() {
     };
     loadData();
   }, [router, empresaId]);
-
-  // Carregar sessões da empresa no mês + sessão ativa do analista
-  useEffect(() => {
-    const carregar = async () => {
-      if (!usuario?.email) return;
-      const { data: sessoes } = await supabase
-        .from('sessoes_trabalho')
-        .select('*')
-        .eq('empresa_id', empresaId)
-        .eq('competencia', competencia)
-        .eq('analista_email', usuario.email)
-        .order('inicio_em', { ascending: false });
-      const todas = sessoes || [];
-      setSessoesMes(todas);
-      const ativa = todas.find((s) => !s.fim_em) || null;
-      setSessaoAtiva(ativa);
-    };
-    carregar();
-  }, [empresaId, competencia, usuario?.email]);
-
-  // Tick a cada segundo enquanto houver sessão ativa
-  useEffect(() => {
-    if (!sessaoAtiva) return;
-    const interval = setInterval(() => setTickAgora(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [sessaoAtiva]);
-
-  const iniciarTrabalho = async () => {
-    if (!usuario?.email || iniciando) return;
-    setIniciando(true);
-    const agora = new Date().toISOString();
-
-    // Fechar qualquer outra sessão aberta do analista (em qualquer empresa)
-    const { data: abertas } = await supabase
-      .from('sessoes_trabalho')
-      .select('*, empresa:empresas(nome)')
-      .is('fim_em', null)
-      .eq('analista_email', usuario.email);
-
-    if (abertas && abertas.length > 0) {
-      for (const aberta of abertas) {
-        const dur = Math.max(0, Math.floor((Date.now() - new Date(aberta.inicio_em).getTime()) / 1000));
-        const motivo = aberta.empresa_id === empresaId
-          ? 'Sessão reiniciada'
-          : `Trocou para "${empresa?.nome || 'outra empresa'}"`;
-        await supabase
-          .from('sessoes_trabalho')
-          .update({ fim_em: agora, duracao_segundos: dur, motivo_pausa: motivo })
-          .eq('id', aberta.id);
-      }
-    }
-
-    // Criar nova sessão
-    const { data } = await supabase
-      .from('sessoes_trabalho')
-      .insert({
-        empresa_id: empresaId,
-        competencia,
-        analista_email: usuario.email,
-        inicio_em: agora,
-      })
-      .select()
-      .single();
-
-    if (data) {
-      setSessaoAtiva(data);
-      setSessoesMes((prev) => {
-        const filtradas = prev.map((s) => {
-          if (!s.fim_em) {
-            const dur = Math.max(0, Math.floor((Date.now() - new Date(s.inicio_em).getTime()) / 1000));
-            return { ...s, fim_em: agora, duracao_segundos: dur, motivo_pausa: 'Sessão reiniciada' };
-          }
-          return s;
-        });
-        return [data, ...filtradas];
-      });
-    }
-    setIniciando(false);
-  };
-
-  const confirmarPausa = async () => {
-    if (!sessaoAtiva || pausando) return;
-    setPausando(true);
-    const agora = new Date().toISOString();
-    const dur = Math.max(0, Math.floor((Date.now() - new Date(sessaoAtiva.inicio_em).getTime()) / 1000));
-    const { data } = await supabase
-      .from('sessoes_trabalho')
-      .update({
-        fim_em: agora,
-        duracao_segundos: dur,
-        motivo_pausa: motivoPausa.trim() || null,
-      })
-      .eq('id', sessaoAtiva.id)
-      .select()
-      .single();
-    if (data) {
-      setSessoesMes((prev) => prev.map((s) => (s.id === sessaoAtiva.id ? data : s)));
-      setSessaoAtiva(null);
-    }
-    setMotivoPausa('');
-    setModalPausaAberto(false);
-    setPausando(false);
-  };
-
-  const segundosSessaoAtiva = sessaoAtiva
-    ? Math.floor((tickAgora - new Date(sessaoAtiva.inicio_em).getTime()) / 1000)
-    : 0;
-
-  const segundosFechadasMes = sessoesMes.reduce(
-    (sum, s) => sum + (s.fim_em ? (s.duracao_segundos || 0) : 0),
-    0
-  );
-
-  const segundosTotalMes = segundosFechadasMes + segundosSessaoAtiva;
 
   const salvarObservacaoGeral = async () => {
     if (!empresa) return;
@@ -560,55 +427,6 @@ export default function EmpresaDetail() {
               </p>
             </div>
 
-            {/* Controle de tempo de trabalho */}
-            <div className="bg-white border border-slate-200 rounded-md p-3 min-w-[240px]">
-              {sessaoAtiva ? (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
-                      Trabalhando agora
-                    </p>
-                  </div>
-                  <p className="text-xl font-mono font-bold text-slate-900 tabular-nums">
-                    {formatarDuracao(segundosSessaoAtiva)}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Iniciado {new Date(sessaoAtiva.inicio_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  <button
-                    onClick={() => setModalPausaAberto(true)}
-                    className="mt-2 w-full text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-amber-50 hover:border-amber-300 transition"
-                  >
-                    ⏸ Pausar trabalho
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <p className="label-tiny">
-                    Tempo no mês
-                  </p>
-                  <p className="text-xl font-mono font-bold text-slate-900 tabular-nums">
-                    {formatarDuracao(segundosTotalMes)}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {sessoesMes.length} sessão{sessoesMes.length === 1 ? '' : 'es'} em {competencia}
-                  </p>
-                  <button
-                    onClick={iniciarTrabalho}
-                    disabled={iniciando}
-                    className="mt-2 w-full text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 transition"
-                  >
-                    {iniciando ? 'Iniciando...' : '▶ Iniciar trabalho'}
-                  </button>
-                </div>
-              )}
-              {sessaoAtiva && segundosTotalMes > segundosSessaoAtiva && (
-                <p className="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
-                  Total no mês: <strong className="font-mono">{formatarDuracao(segundosTotalMes)}</strong>
-                </p>
-              )}
-            </div>
           </div>
           {empresa.nao_envia_extratos && (
             <div className="mt-4 border border-amber-300 bg-amber-50 text-amber-900 rounded-md px-4 py-3 text-sm">
@@ -1045,55 +863,6 @@ export default function EmpresaDetail() {
         )}
       </main>
       </div>
-
-      {modalPausaAberto && sessaoAtiva && (
-        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-md shadow-xl max-w-md w-full">
-            <div className="px-5 py-4 border-b border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                Pausar trabalho
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Sessão de <strong className="font-mono">{formatarDuracao(segundosSessaoAtiva)}</strong> · iniciada às {new Date(sessaoAtiva.inicio_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-            <div className="p-5 space-y-3">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Motivo da pausa (opcional)
-              </label>
-              <textarea
-                value={motivoPausa}
-                onChange={(e) => setMotivoPausa(e.target.value)}
-                placeholder="Ex: Cliente atrasou documentação · Almoço · Reunião · Empresa X é mais urgente..."
-                rows={3}
-                autoFocus
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y"
-              />
-              <p className="text-[11px] text-slate-400">
-                Ajuda o coordenador a entender o fluxo de trabalho. Pode deixar em branco.
-              </p>
-            </div>
-            <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => { setModalPausaAberto(false); setMotivoPausa(''); }}
-                disabled={pausando}
-                className="text-sm font-medium px-4 py-2 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmarPausa}
-                disabled={pausando}
-                className="btn-primary"
-              >
-                {pausando ? 'Pausando...' : 'Confirmar pausa'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
