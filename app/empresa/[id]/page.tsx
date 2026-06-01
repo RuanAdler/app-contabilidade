@@ -51,6 +51,8 @@ export default function EmpresaDetail() {
   const [sidebarFixa, setSidebarFixa] = useState(false);
   const [sidebarHover, setSidebarHover] = useState(false);
   const sidebarAberta = sidebarFixa || sidebarHover;
+  const [copiando, setCopiando] = useState(false);
+  const [msgCopia, setMsgCopia] = useState<string | null>(null);
 
   const hoje = new Date();
   const [ano, setAno] = useState(String(hoje.getFullYear()));
@@ -132,6 +134,100 @@ export default function EmpresaDetail() {
     };
     carregar();
   }, [empresaId, competencia]);
+
+  const competenciaAnterior = (comp: string): string => {
+    const [a, m] = comp.split('-').map(Number);
+    if (m === 1) return `${a - 1}-12`;
+    return `${a}-${String(m - 1).padStart(2, '0')}`;
+  };
+
+  const handleCopiarMesAnterior = async () => {
+    const ant = competenciaAnterior(competencia);
+    if (!confirm(
+      `Copiar marcações de ${ant} para ${competencia}?\n\n` +
+      `Apenas adiciona o que está marcado no mês anterior — NÃO desmarca nada que já está marcado em ${competencia}.\n\n` +
+      `Inclui: Checklist do balanço + Rotinas mensais.`
+    )) return;
+
+    setCopiando(true);
+    setMsgCopia(null);
+
+    const [{ data: progAnt }, { data: rotAnt }] = await Promise.all([
+      supabase.from('progresso_checklist').select('*').eq('empresa_id', empresaId).eq('competencia', ant),
+      supabase.from('progresso_rotinas').select('*').eq('empresa_id', empresaId).eq('competencia', ant),
+    ]);
+
+    const progAntList = (progAnt || []).filter((p) => p.feito_em);
+    const rotAntList = (rotAnt || []).filter((r) => r.feito_em);
+
+    if (progAntList.length === 0 && rotAntList.length === 0) {
+      setCopiando(false);
+      setMsgCopia(`Nenhuma marcação encontrada em ${ant}.`);
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const agora = new Date().toISOString();
+    let countChecklist = 0;
+    let countRotinas = 0;
+
+    // Checklist
+    for (const p of progAntList) {
+      const existente = checklist.find((c) => c.etapa_id === p.etapa_id);
+      if (existente?.feito_em) continue; // já marcado, pula
+      if (existente) {
+        await supabase
+          .from('progresso_checklist')
+          .update({ feito_em: agora, feito_por: user?.email || null })
+          .eq('id', existente.id);
+      } else {
+        await supabase.from('progresso_checklist').insert({
+          empresa_id: empresaId,
+          etapa_id: p.etapa_id,
+          competencia,
+          feito_em: agora,
+          feito_por: user?.email || null,
+        });
+      }
+      countChecklist++;
+    }
+
+    // Rotinas
+    for (const r of rotAntList) {
+      const existente = rotinas.find((x) => x.tipo_rotina === r.tipo_rotina);
+      if (existente?.feito_em) continue;
+      if (existente) {
+        await supabase
+          .from('progresso_rotinas')
+          .update({ feito_em: agora, feito_por: user?.email || null })
+          .eq('id', existente.id);
+      } else {
+        await supabase.from('progresso_rotinas').insert({
+          empresa_id: empresaId,
+          competencia,
+          tipo_rotina: r.tipo_rotina,
+          feito_em: agora,
+          feito_por: user?.email || null,
+        });
+      }
+      countRotinas++;
+    }
+
+    const [{ data: novoProg }, { data: novasRot }] = await Promise.all([
+      supabase.from('progresso_checklist').select('*').eq('empresa_id', empresaId).eq('competencia', competencia),
+      supabase.from('progresso_rotinas').select('*').eq('empresa_id', empresaId).eq('competencia', competencia),
+    ]);
+    setChecklist(novoProg || []);
+    setRotinas(novasRot || []);
+
+    setCopiando(false);
+    setMsgCopia(
+      countChecklist + countRotinas === 0
+        ? 'Tudo que estava marcado em ' + ant + ' já estava marcado aqui também.'
+        : `Copiadas ${countChecklist} contas e ${countRotinas} rotinas de ${ant}.`
+    );
+    setTimeout(() => setMsgCopia(null), 6000);
+  };
 
   const handleToggleRotina = async (tipo: string, feito: boolean) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -549,13 +645,35 @@ export default function EmpresaDetail() {
         <div className="space-y-6">
           {/* Checklist */}
           <section className="bg-white border border-slate-200 rounded-md shadow-sm">
-            <header className="px-5 py-4 border-b border-slate-200">
-              <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                Checklist do balanço
-              </h2>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Marque cada conta conforme conferir o balanço da competência {competencia}.
-              </p>
+            <header className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                  Checklist do balanço
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Marque cada conta conforme conferir o balanço da competência {competencia}.
+                </p>
+                {msgCopia && (
+                  <p className="mt-1 text-xs font-medium text-emerald-700">{msgCopia}</p>
+                )}
+              </div>
+              <button
+                onClick={handleCopiarMesAnterior}
+                disabled={copiando}
+                title={`Copia marcações de ${competenciaAnterior(competencia)} para ${competencia}. Apenas adiciona, não desmarca.`}
+                className="text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-50 transition inline-flex items-center gap-1.5 shrink-0"
+              >
+                {copiando ? (
+                  <>Copiando...</>
+                ) : (
+                  <>
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                    </svg>
+                    Copiar de {competenciaAnterior(competencia)}
+                  </>
+                )}
+              </button>
             </header>
 
             {etapas.length === 0 ? (
