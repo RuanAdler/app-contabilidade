@@ -1158,12 +1158,12 @@ function DashboardAnalista() {
                                     const ehFuturo = numMes > mesAtualNum;
                                     const cor =
                                       ehFuturo
-                                        ? 'bg-slate-100'
+                                        ? 'bg-slate-100 text-slate-400'
                                         : status === 'concluido'
-                                        ? 'bg-emerald-500'
+                                        ? 'bg-emerald-500 text-white'
                                         : status === 'em_andamento'
-                                        ? 'bg-amber-400'
-                                        : 'bg-slate-200';
+                                        ? 'bg-amber-400 text-white'
+                                        : 'bg-slate-200 text-slate-600';
                                     const feitos = checklistAno.filter(
                                       (c) => c.empresa_id === empresa.id && c.competencia === competencia && c.feito_em
                                     ).length;
@@ -1171,10 +1171,12 @@ function DashboardAnalista() {
                                       <div key={i} className="flex flex-col items-center gap-0.5">
                                         <div
                                           title={`${MESES_NOMES[i]}/${anoAtual}: ${ehFuturo ? '—' : status === 'concluido' ? 'Concluído' : status === 'em_andamento' ? `Em andamento (${feitos}/${totalEtapas})` : 'Não iniciado'}`}
-                                          className={`h-3.5 w-3.5 rounded-sm ${cor}`}
-                                        />
+                                          className={`h-5 w-5 rounded-sm flex items-center justify-center text-[10px] font-semibold tabular-nums ${cor}`}
+                                        >
+                                          {numMes}
+                                        </div>
                                         {ehAtual && (
-                                          <div className="h-0.5 w-3.5 rounded-full bg-slate-900" />
+                                          <div className="h-0.5 w-5 rounded-full bg-slate-900" />
                                         )}
                                       </div>
                                     );
