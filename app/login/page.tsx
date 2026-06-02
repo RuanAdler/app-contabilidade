@@ -33,7 +33,9 @@ export default function Login() {
       .eq('email', email)
       .single();
 
-    if (userData?.cargo === 'coordenador') {
+    if (userData?.cargo === 'desenvolvedor') {
+      router.push('/dashboard-dev');
+    } else if (userData?.cargo === 'coordenador') {
       router.push('/dashboard-coordenador');
     } else {
       router.push('/dashboard-analista');

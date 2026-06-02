@@ -46,6 +46,10 @@ export default function Configuracoes() {
         .eq('email', session.user.email)
         .single();
 
+      if (u?.cargo === 'desenvolvedor') {
+        router.push('/dashboard-dev?aba=configuracoes');
+        return;
+      }
       if (u?.cargo !== 'coordenador') {
         router.push('/dashboard-analista');
         return;

@@ -111,15 +111,6 @@ export default function Navbar({ usuario, avatarUrl }: Props) {
               >
                 Meu perfil
               </Link>
-              {cargo === 'coordenador' && (
-                <Link
-                  href="/configuracoes"
-                  onClick={() => setAberto(false)}
-                  className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-                >
-                  Configurações
-                </Link>
-              )}
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition border-t border-slate-100"
