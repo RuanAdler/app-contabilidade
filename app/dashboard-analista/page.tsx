@@ -273,7 +273,6 @@ function DashboardAnalista() {
     return 'em_andamento';
   };
 
-  const MESES_ABREV = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   const MESES_NOMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const anoAtual = hoje.getFullYear();
   const mesAtualNum = hoje.getMonth() + 1;
@@ -1111,12 +1110,12 @@ function DashboardAnalista() {
                             Empresa
                           </th>
                           <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-wrap">
                               <span>{anoAtual}</span>
-                              <span className="font-normal text-[10px] text-slate-400">
-                                <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500 align-middle mr-1" />Concluído
-                                <span className="inline-block h-2 w-2 rounded-sm bg-amber-500 align-middle ml-2 mr-1" />Em and.
-                                <span className="inline-block h-2 w-2 rounded-sm bg-slate-200 align-middle ml-2 mr-1" />Não inic.
+                              <span className="font-normal normal-case text-[10px] text-slate-400 flex items-center gap-2">
+                                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" />concluído</span>
+                                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-400" />em andamento</span>
+                                <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-slate-200" />não iniciado</span>
                               </span>
                             </div>
                           </th>
@@ -1150,8 +1149,8 @@ function DashboardAnalista() {
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="flex items-center gap-0.5">
-                                  {MESES_ABREV.map((letra, i) => {
+                                <div className="flex items-center gap-1">
+                                  {Array.from({ length: 12 }, (_, i) => {
                                     const numMes = i + 1;
                                     const competencia = `${anoAtual}-${String(numMes).padStart(2, '0')}`;
                                     const status = statusDoMes(empresa.id, competencia);
@@ -1159,24 +1158,24 @@ function DashboardAnalista() {
                                     const ehFuturo = numMes > mesAtualNum;
                                     const cor =
                                       ehFuturo
-                                        ? 'bg-slate-100 text-slate-300'
+                                        ? 'bg-slate-100'
                                         : status === 'concluido'
-                                        ? 'bg-emerald-500 text-white'
+                                        ? 'bg-emerald-500'
                                         : status === 'em_andamento'
-                                        ? 'bg-amber-500 text-white'
-                                        : 'bg-slate-200 text-slate-500';
+                                        ? 'bg-amber-400'
+                                        : 'bg-slate-200';
                                     const feitos = checklistAno.filter(
                                       (c) => c.empresa_id === empresa.id && c.competencia === competencia && c.feito_em
                                     ).length;
                                     return (
-                                      <div
-                                        key={i}
-                                        title={`${MESES_NOMES[i]}/${anoAtual}: ${ehFuturo ? '—' : status === 'concluido' ? 'Concluído' : status === 'em_andamento' ? `Em andamento (${feitos}/${totalEtapas})` : 'Não iniciado'}`}
-                                        className={`relative h-6 w-6 rounded text-[10px] font-bold flex items-center justify-center ${cor} ${
-                                          ehAtual ? 'ring-2 ring-slate-900 ring-offset-1' : ''
-                                        }`}
-                                      >
-                                        {letra}
+                                      <div key={i} className="flex flex-col items-center gap-0.5">
+                                        <div
+                                          title={`${MESES_NOMES[i]}/${anoAtual}: ${ehFuturo ? '—' : status === 'concluido' ? 'Concluído' : status === 'em_andamento' ? `Em andamento (${feitos}/${totalEtapas})` : 'Não iniciado'}`}
+                                          className={`h-3.5 w-3.5 rounded-sm ${cor}`}
+                                        />
+                                        {ehAtual && (
+                                          <div className="h-0.5 w-3.5 rounded-full bg-slate-900" />
+                                        )}
                                       </div>
                                     );
                                   })}
