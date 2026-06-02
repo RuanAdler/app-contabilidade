@@ -21,7 +21,7 @@ const SUBGRUPO_LABEL: Record<string, string> = {
 type EmpresaComAnalista = Empresa & { analista_nome: string };
 type FiltroStatus = 'todos' | StatusEmpresa;
 type StatusMes = 'sem_bancos' | 'concluido' | 'parcial' | 'pendente';
-type Aba = 'visao' | 'controle' | 'desempenho' | 'help' | 'relatorios';
+type Aba = 'visao' | 'controle' | 'desempenho' | 'help' | 'relatorios' | 'equipe';
 
 const CORES_ANALISTAS = ['#0f766e', '#b45309', '#7c3aed', '#be123c', '#0369a1'];
 
@@ -108,6 +108,16 @@ function DashboardCoordenador() {
   const [etapas, setEtapas] = useState<EtapaChecklist[]>([]);
   const [mostrarMaisAtencao, setMostrarMaisAtencao] = useState(false);
 
+  // Modal gestão de analistas
+  const [modalAnalistaAberto, setModalAnalistaAberto] = useState(false);
+  const [novoAnaNome, setNovoAnaNome] = useState('');
+  const [novoAnaEmail, setNovoAnaEmail] = useState('');
+  const [novoAnaSenha, setNovoAnaSenha] = useState('');
+  const [novoAnaCargo, setNovoAnaCargo] = useState<'analista' | 'coordenador'>('analista');
+  const [salvandoAna, setSalvandoAna] = useState(false);
+  const [msgAna, setMsgAna] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
+  const [todosAnalistas, setTodosAnalistas] = useState<Analista[]>([]);
+
   // Filtros dos relatórios
   const [relExtrCompetencia, setRelExtrCompetencia] = useState(COMPETENCIA_ATUAL);
   const [relExtrAnalista, setRelExtrAnalista] = useState('todos');
@@ -147,13 +157,14 @@ function DashboardCoordenador() {
 
       setUsuario(session.user);
 
-      const { data: analistasData } = await supabase
+      const { data: todosData } = await supabase
         .from('analistas')
         .select('*')
-        .eq('cargo', 'analista')
+        .order('cargo')
         .order('nome');
-
-      const listaAnalistas = analistasData || [];
+      const todos = todosData || [];
+      setTodosAnalistas(todos);
+      const listaAnalistas = todos.filter((a) => a.cargo === 'analista');
       setAnalistas(listaAnalistas);
       if (listaAnalistas[0]) setNovaEmpAnalista(listaAnalistas[0].id);
 
@@ -695,6 +706,83 @@ function DashboardCoordenador() {
     setEmpresas((prev) => prev.filter((e) => e.id !== id));
   };
 
+  const handleRemoverAnalista = async (id: string, nome: string) => {
+    const empresasAtribuidas = empresas.filter((e) => e.analista_id === id).length;
+    if (empresasAtribuidas > 0) {
+      alert(`"${nome}" tem ${empresasAtribuidas} empresa(s) atribuída(s). Reatribua antes de remover.`);
+      return;
+    }
+    if (!confirm(`Remover "${nome}" da tabela de analistas?\n\nIsso só remove o registro do app — a conta de login no Supabase Auth continua existindo (precisa remover lá separadamente).`)) return;
+    const { error } = await supabase.from('analistas').delete().eq('id', id);
+    if (error) {
+      alert('Erro: ' + error.message);
+      return;
+    }
+    setTodosAnalistas((prev) => prev.filter((a) => a.id !== id));
+    setAnalistas((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleAdicionarAnalista = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nome = novoAnaNome.trim();
+    const email = novoAnaEmail.trim().toLowerCase();
+    const senha = novoAnaSenha;
+    if (!nome || !email || senha.length < 6) {
+      setMsgAna({ tipo: 'erro', texto: 'Preencha todos os campos (senha mín. 6 caracteres).' });
+      return;
+    }
+    setSalvandoAna(true);
+    setMsgAna(null);
+
+    // 1. Criar conta no Supabase Auth
+    try {
+      const resp = await fetch('https://vnmjducnedyihsdkltyw.supabase.co/auth/v1/signup', {
+        method: 'POST',
+        headers: {
+          'apikey': 'sb_publishable_qfiY6GtXrsg0X4V_T1IRxQ_GZj_YasW',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password: senha }),
+      });
+      const authData = await resp.json();
+      if (!resp.ok) {
+        setMsgAna({ tipo: 'erro', texto: 'Erro no Auth: ' + (authData?.msg || authData?.error_description || 'desconhecido') });
+        setSalvandoAna(false);
+        return;
+      }
+    } catch (err) {
+      setMsgAna({ tipo: 'erro', texto: 'Erro de conexão com Supabase Auth.' });
+      setSalvandoAna(false);
+      return;
+    }
+
+    // 2. Inserir registro na tabela analistas
+    const { data, error } = await supabase
+      .from('analistas')
+      .insert({ nome, email, cargo: novoAnaCargo })
+      .select()
+      .single();
+    if (error) {
+      setMsgAna({ tipo: 'erro', texto: 'Auth criado, mas erro na tabela: ' + error.message });
+      setSalvandoAna(false);
+      return;
+    }
+
+    if (data) {
+      setTodosAnalistas((prev) => [...prev, data].sort((a, b) => a.cargo.localeCompare(b.cargo) || a.nome.localeCompare(b.nome)));
+      if (data.cargo === 'analista') {
+        setAnalistas((prev) => [...prev, data].sort((a, b) => a.nome.localeCompare(b.nome)));
+      }
+    }
+
+    setMsgAna({ tipo: 'ok', texto: `Conta criada para ${nome}. Importante: pode ser preciso confirmar o e-mail no Supabase Auth para o login funcionar.` });
+    setNovoAnaNome('');
+    setNovoAnaEmail('');
+    setNovoAnaSenha('');
+    setNovoAnaCargo('analista');
+    setSalvandoAna(false);
+  };
+
   const handleAdicionarEmpresa = async (e: React.FormEvent) => {
     e.preventDefault();
     const nome = novaEmpNome.trim();
@@ -784,6 +872,15 @@ function DashboardCoordenador() {
       icone: (
         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'equipe',
+      label: 'Equipe',
+      icone: (
+        <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
       ),
     },
@@ -2246,8 +2343,226 @@ function DashboardCoordenador() {
               </div>
             </>
           )}
+
+          {aba === 'equipe' && (
+            <>
+              <div className="mb-8 border-b border-slate-200 pb-6 flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="label-tiny">Administração</p>
+                  <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                    Equipe
+                  </h1>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Gerencie analistas e coordenadores. Adicione novos usuários, edite ou remova.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setModalAnalistaAberto(true); setMsgAna(null); }}
+                  className="btn-primary"
+                >
+                  + Adicionar analista
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div className="bg-white border border-slate-200 rounded-md p-4">
+                  <p className="label-tiny">Analistas</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {todosAnalistas.filter((a) => a.cargo === 'analista').length}
+                  </p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-md p-4">
+                  <p className="label-tiny">Coordenadores</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+                    {todosAnalistas.filter((a) => a.cargo === 'coordenador').length}
+                  </p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-md p-4">
+                  <p className="label-tiny">Total no app</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{todosAnalistas.length}</p>
+                </div>
+              </div>
+
+              <section className="bg-white border border-slate-200 rounded-md shadow-sm">
+                <header className="px-5 py-4 border-b border-slate-200">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                    Usuários cadastrados
+                  </h2>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Lista de todos os analistas e coordenadores do app.
+                  </p>
+                </header>
+                {todosAnalistas.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-sm text-slate-500">Nenhum usuário cadastrado.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Nome</th>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">E-mail</th>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Cargo</th>
+                        <th className="text-left px-5 py-2.5 font-semibold text-xs uppercase tracking-wider text-slate-600">Empresas</th>
+                        <th className="px-5 py-2.5 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {todosAnalistas.map((a, idx) => {
+                        const qtdEmpresas = empresas.filter((e) => e.analista_id === a.id).length;
+                        return (
+                          <tr
+                            key={a.id}
+                            className={`border-b border-slate-100 ${idx === todosAnalistas.length - 1 ? 'border-b-0' : ''}`}
+                          >
+                            <td className="px-5 py-3 text-slate-900 font-medium">{a.nome}</td>
+                            <td className="px-5 py-3 text-slate-600 text-xs">{a.email}</td>
+                            <td className="px-5 py-3">
+                              <span className={`badge ${a.cargo === 'coordenador' ? 'badge-destaque' : 'badge-info'}`}>
+                                {a.cargo === 'coordenador' ? 'Coordenador' : 'Analista'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 text-slate-700">
+                              {a.cargo === 'analista' ? (
+                                <span className={qtdEmpresas > 0 ? 'font-medium' : 'text-slate-400'}>
+                                  {qtdEmpresas}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              {a.email !== usuario?.email && (
+                                <button
+                                  onClick={() => handleRemoverAnalista(a.id, a.nome)}
+                                  title="Remover do app"
+                                  className="text-slate-400 hover:text-red-600 transition"
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                                  </svg>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </section>
+
+              <div className="mt-8 bg-slate-50 border border-slate-200 rounded-md p-5 text-sm text-slate-600">
+                <p className="font-semibold text-slate-900 mb-2">⚠️ Sobre confirmação de e-mail</p>
+                <p className="text-xs">
+                  Se ao criar o analista o login dele não funcionar, é porque o Supabase exige confirmação de e-mail por padrão. Você tem 2 opções:
+                </p>
+                <ol className="list-decimal list-inside text-xs mt-2 space-y-1">
+                  <li>
+                    <strong>Desativar a confirmação para sempre</strong> — vá em <em>Supabase Dashboard → Authentication → Providers → Email</em> e desmarque <strong>"Confirm email"</strong>. Aí novas contas já vêm prontas.
+                  </li>
+                  <li>
+                    <strong>Confirmar manualmente</strong> — rode no SQL Editor:{' '}
+                    <code className="bg-white border border-slate-300 px-1.5 py-0.5 rounded text-[11px]">
+                      UPDATE auth.users SET email_confirmed_at = NOW() WHERE email = &apos;email_do_analista&apos;;
+                    </code>
+                  </li>
+                </ol>
+              </div>
+            </>
+          )}
         </main>
       </div>
+
+      {modalAnalistaAberto && (
+        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-md shadow-xl max-w-md w-full">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+                Adicionar analista
+              </h3>
+              <button
+                onClick={() => { setModalAnalistaAberto(false); setMsgAna(null); }}
+                className="text-slate-400 hover:text-slate-700 transition"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleAdicionarAnalista} className="p-5 space-y-4">
+              <div>
+                <label className="block label-tiny mb-1.5">Nome completo</label>
+                <input
+                  type="text"
+                  value={novoAnaNome}
+                  onChange={(e) => setNovoAnaNome(e.target.value)}
+                  required
+                  autoFocus
+                  className="input-text"
+                />
+              </div>
+              <div>
+                <label className="block label-tiny mb-1.5">E-mail</label>
+                <input
+                  type="email"
+                  value={novoAnaEmail}
+                  onChange={(e) => setNovoAnaEmail(e.target.value)}
+                  required
+                  className="input-text"
+                />
+              </div>
+              <div>
+                <label className="block label-tiny mb-1.5">Senha inicial</label>
+                <input
+                  type="text"
+                  value={novoAnaSenha}
+                  onChange={(e) => setNovoAnaSenha(e.target.value)}
+                  required
+                  minLength={6}
+                  className="input-text"
+                  placeholder="Mínimo 6 caracteres"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  O analista poderá trocar depois em Meu Perfil.
+                </p>
+              </div>
+              <div>
+                <label className="block label-tiny mb-1.5">Cargo</label>
+                <select
+                  value={novoAnaCargo}
+                  onChange={(e) => setNovoAnaCargo(e.target.value as 'analista' | 'coordenador')}
+                  className="input-select"
+                >
+                  <option value="analista">Analista</option>
+                  <option value="coordenador">Coordenador</option>
+                </select>
+              </div>
+              {msgAna && (
+                <p className={`text-xs ${msgAna.tipo === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {msgAna.texto}
+                </p>
+              )}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setModalAnalistaAberto(false); setMsgAna(null); }}
+                  className="btn-secondary"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoAna || !novoAnaNome.trim() || !novoAnaEmail.trim() || novoAnaSenha.length < 6}
+                  className="btn-primary"
+                >
+                  {salvandoAna ? 'Criando...' : 'Criar conta'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {modalAberto && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
