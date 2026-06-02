@@ -115,6 +115,16 @@ function DashboardAnalista() {
   const [extrAno, setExtrAno] = useState(String(hoje.getFullYear()));
   const [extrMes, setExtrMes] = useState(String(hoje.getMonth() + 1).padStart(2, '0'));
   const [extrBusca, setExtrBusca] = useState('');
+  const [empresasExpandidas, setEmpresasExpandidas] = useState<Set<string>>(new Set());
+
+  const toggleExpandirEmpresa = (id: string) => {
+    setEmpresasExpandidas((prev) => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  };
   const [extrFiltro, setExtrFiltro] = useState<FiltroExtrato>('todos');
   const router = useRouter();
 
@@ -1314,81 +1324,69 @@ function DashboardAnalista() {
                           const e = extratoPorBanco[b.id];
                           return !e || (e.status !== 'recebido' && e.status !== 'importado');
                         });
-                        const statusesDistintos = new Set(
-                          bs.map((b) => extratoPorBanco[b.id]?.status || 'pendente')
-                        );
-                        const statusUnico = statusesDistintos.size === 1
-                          ? (Array.from(statusesDistintos)[0] as StatusExtrato)
-                          : null;
+                        const expandida = empresasExpandidas.has(emp.id);
                         return (
-                          <li key={emp.id} className="px-4 py-3 hover:bg-slate-50">
-                            <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_140px] gap-3 items-center">
-                              {/* Coluna empresa + bancos em itálico */}
+                          <li key={emp.id} className={expandida ? 'bg-slate-50/50' : 'hover:bg-slate-50'}>
+                            {/* Linha compacta */}
+                            <div className="px-4 py-2.5 grid grid-cols-[1fr_auto_140px_28px] gap-3 items-center">
+                              {/* Nome + chips de banco */}
                               <div className="min-w-0">
-                                <Link
-                                  href={`/empresa/${emp.id}/extratos`}
-                                  className="text-sm font-semibold text-slate-900 hover:underline"
-                                >
-                                  {emp.nome}
-                                </Link>
-                                {emp.status === 'suspensa' && (
-                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300 align-middle">
-                                    Suspensa
-                                  </span>
-                                )}
-                                {bs.length === 0 ? (
-                                  <p className="text-[11px] text-slate-400 italic mt-0.5">
-                                    Sem bancos cadastrados
-                                  </p>
-                                ) : (
-                                  <div className="mt-0.5 space-y-0.5">
-                                    <p className="text-[11px] text-slate-500 italic truncate">
-                                      <span className="text-slate-400">Bancos:</span>{' '}
-                                      {bs.map((b) => b.nome_banco).join(', ')}
-                                    </p>
-                                    {pendentes.length > 0 ? (
-                                      <p className="text-[11px] text-amber-700 italic truncate">
-                                        <span className="text-amber-600">Pendentes:</span>{' '}
-                                        {pendentes.map((b) => b.nome_banco).join(', ')}
-                                      </p>
-                                    ) : (
-                                      <p className="text-[11px] text-emerald-700 italic">
-                                        Todos os extratos recebidos
-                                      </p>
-                                    )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Link
+                                    href={`/empresa/${emp.id}/extratos`}
+                                    className="text-sm font-semibold text-slate-900 hover:underline truncate"
+                                  >
+                                    {emp.nome}
+                                  </Link>
+                                  {emp.status === 'suspensa' && (
+                                    <span className="inline-flex items-center px-1.5 py-0 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                                      Suspensa
+                                    </span>
+                                  )}
+                                </div>
+                                {bs.length > 0 && (
+                                  <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                    {bs.map((b) => {
+                                      const e = extratoPorBanco[b.id];
+                                      const st = (e?.status || 'pendente') as StatusExtrato;
+                                      const cor =
+                                        st === 'recebido' || st === 'importado'
+                                          ? 'bg-emerald-500'
+                                          : st === 'solicitado'
+                                          ? 'bg-amber-400'
+                                          : 'bg-slate-300';
+                                      return (
+                                        <span
+                                          key={b.id}
+                                          title={`${b.nome_banco}: ${STATUS_EXT_LABEL[st]}${e?.qtd_solicitacoes ? ` · ${e.qtd_solicitacoes}× cobrado` : ''}`}
+                                          className={`inline-block h-2.5 w-2.5 rounded-sm ${cor}`}
+                                        />
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
 
-                              {/* Status do mês selecionado (dropdown rápido) */}
-                              <div>
-                                {bs.length > 0 ? (
-                                  <select
-                                    value={statusUnico || ''}
-                                    onChange={(ev) => handleAplicarStatusEmTodos(emp.id, ev.target.value as StatusExtrato)}
-                                    className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
-                                    title={`Aplica o status a todos os bancos para a competência ${extrCompetencia}`}
-                                  >
-                                    <option value="" disabled>
-                                      {statusUnico ? STATUS_EXT_LABEL[statusUnico] : 'Vários status'}
-                                    </option>
-                                    <option value="pendente">Marcar todos: Pendente</option>
-                                    <option value="solicitado">Marcar todos: Solicitado</option>
-                                    <option value="recebido">Marcar todos: Recebido</option>
-                                    <option value="importado">Marcar todos: Importado</option>
-                                  </select>
-                                ) : (
-                                  <span className="text-[11px] text-slate-400 italic">—</span>
-                                )}
+                              {/* Resumo curto */}
+                              <div className="text-[11px] text-slate-500 whitespace-nowrap">
+                                {bs.length === 0
+                                  ? <span className="italic text-slate-400">Sem bancos</span>
+                                  : (
+                                    <>
+                                      {bs.length} {bs.length === 1 ? 'banco' : 'bancos'}
+                                      {pendentes.length > 0 && (
+                                        <> · <span className="text-amber-700 font-medium">{pendentes.length} pend.</span></>
+                                      )}
+                                    </>
+                                  )}
                               </div>
 
-                              {/* Botão de solicitação */}
+                              {/* Ação principal */}
                               <div className="text-right">
                                 {bs.length === 0 ? (
                                   <Link
                                     href={`/empresa/${emp.id}/extratos`}
                                     className="inline-block text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition w-full text-center"
-                                    title="Cadastrar bancos da empresa"
                                   >
                                     + Cadastrar banco
                                   </Link>
@@ -1406,7 +1404,78 @@ function DashboardAnalista() {
                                   </span>
                                 )}
                               </div>
+
+                              {/* Toggle expandir */}
+                              <button
+                                onClick={() => toggleExpandirEmpresa(emp.id)}
+                                disabled={bs.length === 0}
+                                title={expandida ? 'Ocultar bancos' : 'Ver bancos'}
+                                className="h-7 w-7 inline-flex items-center justify-center rounded text-slate-400 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                              >
+                                <svg
+                                  className={`h-4 w-4 transition-transform ${expandida ? 'rotate-90' : ''}`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
                             </div>
+
+                            {/* Bancos expandidos */}
+                            {expandida && bs.length > 0 && (
+                              <div className="px-4 pb-3 pt-1">
+                                <div className="rounded border border-slate-200 bg-white overflow-hidden">
+                                  {bs.map((b, idx) => {
+                                    const e = extratoPorBanco[b.id];
+                                    const st = (e?.status || 'pendente') as StatusExtrato;
+                                    const recebido = st === 'recebido' || st === 'importado';
+                                    const qtd = e?.qtd_solicitacoes || 0;
+                                    return (
+                                      <div
+                                        key={b.id}
+                                        className={`grid grid-cols-[1fr_140px_140px_auto] gap-3 items-center px-3 py-2 text-sm ${
+                                          idx < bs.length - 1 ? 'border-b border-slate-100' : ''
+                                        }`}
+                                      >
+                                        <span className="text-slate-700 font-medium truncate">{b.nome_banco}</span>
+                                        <select
+                                          value={st}
+                                          onChange={(ev) => handleStatusExtrato(b.id, ev.target.value as StatusExtrato)}
+                                          className="px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                        >
+                                          <option value="pendente">Pendente</option>
+                                          <option value="solicitado">Solicitado</option>
+                                          <option value="recebido">Recebido</option>
+                                          <option value="importado">Importado</option>
+                                        </select>
+                                        <span className="text-[11px] text-slate-500">
+                                          {qtd > 0 ? (
+                                            <>
+                                              cobrado <strong className="text-slate-700">{qtd}×</strong>
+                                              {e?.ultima_solicitacao_em && (
+                                                <> · {new Date(e.ultima_solicitacao_em).toLocaleDateString('pt-BR')}</>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <span className="italic">sem cobranças</span>
+                                          )}
+                                        </span>
+                                        <button
+                                          onClick={() => handleRegistrarCobranca(b.id)}
+                                          disabled={recebido}
+                                          title={recebido ? 'Já recebido' : 'Registrar cobrança'}
+                                          className="text-[11px] font-medium px-2.5 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-700 disabled:hover:border-slate-300 transition whitespace-nowrap"
+                                        >
+                                          {recebido ? '✓' : '+ Cobrar'}
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </li>
                         );
                       })}
