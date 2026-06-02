@@ -73,6 +73,7 @@ function DashboardAnalista() {
   const [usuario, setUsuario] = useState<any>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [checklistMes, setChecklistMes] = useState<ProgressoChecklist[]>([]);
+  const [checklistAno, setChecklistAno] = useState<ProgressoChecklist[]>([]);
   const [tarefasMes, setTarefasMes] = useState<TarefaEmpresa[]>([]);
   const [totalEtapas, setTotalEtapas] = useState(0);
   const [busca, setBusca] = useState('');
@@ -147,12 +148,13 @@ function DashboardAnalista() {
 
         const ids = lista.map((e) => e.id);
         if (ids.length > 0) {
-          const [{ data: checklist }, { data: tarefas }, { count }] = await Promise.all([
+          const anoAtual = hoje.getFullYear();
+          const [{ data: checklistAnoData }, { data: tarefas }, { count }] = await Promise.all([
             supabase
               .from('progresso_checklist')
               .select('*')
               .in('empresa_id', ids)
-              .eq('competencia', COMPETENCIA_ATUAL),
+              .like('competencia', `${anoAtual}-%`),
             supabase
               .from('tarefas_empresa')
               .select('*')
@@ -162,7 +164,9 @@ function DashboardAnalista() {
               .from('etapas_checklist')
               .select('*', { count: 'exact', head: true }),
           ]);
-          setChecklistMes(checklist || []);
+          const todoAno = checklistAnoData || [];
+          setChecklistAno(todoAno);
+          setChecklistMes(todoAno.filter((c) => c.competencia === COMPETENCIA_ATUAL));
           setTarefasMes(tarefas || []);
           setTotalEtapas(count || 0);
         }
@@ -257,6 +261,22 @@ function DashboardAnalista() {
     if (feitos >= totalEtapas) return 'concluido';
     return 'em_andamento';
   };
+
+  type StatusMes = 'nao_iniciado' | 'em_andamento' | 'concluido';
+  const statusDoMes = (empresaId: string, competencia: string): StatusMes => {
+    if (totalEtapas === 0) return 'nao_iniciado';
+    const feitos = checklistAno.filter(
+      (c) => c.empresa_id === empresaId && c.competencia === competencia && c.feito_em
+    ).length;
+    if (feitos === 0) return 'nao_iniciado';
+    if (feitos >= totalEtapas) return 'concluido';
+    return 'em_andamento';
+  };
+
+  const MESES_ABREV = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const MESES_NOMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const anoAtual = hoje.getFullYear();
+  const mesAtualNum = hoje.getMonth() + 1;
 
   // Pendências
   const tarefasAtrasadas = useMemo(() =>
@@ -1091,7 +1111,14 @@ function DashboardAnalista() {
                             Empresa
                           </th>
                           <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
-                            Situação
+                            <div className="flex items-center gap-3">
+                              <span>{anoAtual}</span>
+                              <span className="font-normal text-[10px] text-slate-400">
+                                <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500 align-middle mr-1" />Concluído
+                                <span className="inline-block h-2 w-2 rounded-sm bg-amber-500 align-middle ml-2 mr-1" />Em and.
+                                <span className="inline-block h-2 w-2 rounded-sm bg-slate-200 align-middle ml-2 mr-1" />Não inic.
+                              </span>
+                            </div>
                           </th>
                           <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider text-slate-600">
                             Ação
@@ -1100,7 +1127,6 @@ function DashboardAnalista() {
                       </thead>
                       <tbody>
                         {empresasFiltradas.map((empresa, idx) => {
-                          const statusBal = statusBalancoDaEmpresa(empresa.id);
                           return (
                             <tr
                               key={empresa.id}
@@ -1108,29 +1134,52 @@ function DashboardAnalista() {
                                 idx === empresasFiltradas.length - 1 ? 'border-b-0' : ''
                               }`}
                             >
-                              <td className="px-4 py-3 text-slate-900 font-medium">
-                                {empresa.nome}
-                              </td>
                               <td className="px-4 py-3">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span
-                                    className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${STATUS_CLASS[statusBal]}`}
-                                  >
-                                    {STATUS_LABEL[statusBal]}
-                                  </span>
+                                <p className="text-slate-900 font-medium">{empresa.nome}</p>
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                                   {empresa.status === 'suspensa' && (
-                                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                                    <span className="inline-flex items-center px-1.5 py-0 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
                                       Suspensa
                                     </span>
                                   )}
                                   {empresa.nao_envia_extratos && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
-                                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21V3m0 0l13 4-13 5" />
-                                      </svg>
-                                      Não envia extratos
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0 text-[10px] font-medium rounded border bg-amber-50 text-amber-800 border-amber-300">
+                                      ⚑ Não envia extratos
                                     </span>
                                   )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-0.5">
+                                  {MESES_ABREV.map((letra, i) => {
+                                    const numMes = i + 1;
+                                    const competencia = `${anoAtual}-${String(numMes).padStart(2, '0')}`;
+                                    const status = statusDoMes(empresa.id, competencia);
+                                    const ehAtual = numMes === mesAtualNum;
+                                    const ehFuturo = numMes > mesAtualNum;
+                                    const cor =
+                                      ehFuturo
+                                        ? 'bg-slate-100 text-slate-300'
+                                        : status === 'concluido'
+                                        ? 'bg-emerald-500 text-white'
+                                        : status === 'em_andamento'
+                                        ? 'bg-amber-500 text-white'
+                                        : 'bg-slate-200 text-slate-500';
+                                    const feitos = checklistAno.filter(
+                                      (c) => c.empresa_id === empresa.id && c.competencia === competencia && c.feito_em
+                                    ).length;
+                                    return (
+                                      <div
+                                        key={i}
+                                        title={`${MESES_NOMES[i]}/${anoAtual}: ${ehFuturo ? '—' : status === 'concluido' ? 'Concluído' : status === 'em_andamento' ? `Em andamento (${feitos}/${totalEtapas})` : 'Não iniciado'}`}
+                                        className={`relative h-6 w-6 rounded text-[10px] font-bold flex items-center justify-center ${cor} ${
+                                          ehAtual ? 'ring-2 ring-slate-900 ring-offset-1' : ''
+                                        }`}
+                                      >
+                                        {letra}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-right">
