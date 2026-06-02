@@ -2,7 +2,7 @@ export interface Analista {
   id: string;
   nome: string;
   email: string;
-  cargo: 'analista' | 'coordenador';
+  cargo: 'analista' | 'coordenador' | 'desenvolvedor';
   avatar_url: string | null;
   created_at: string;
 }
