@@ -11,7 +11,7 @@ type FiltroEnvio = 'todas' | 'regulares' | 'nao_envia';
 type FiltroBalanco = 'todos' | 'nao_iniciado' | 'em_andamento' | 'concluido' | 'atrasado';
 type StatusBalanco = 'nao_iniciado' | 'em_andamento' | 'concluido' | 'atrasado';
 type StatusExtrato = 'pendente' | 'solicitado' | 'recebido' | 'importado';
-type FiltroExtrato = 'todos' | 'pendentes' | 'parciais' | 'completos';
+type FiltroExtrato = 'todos' | 'pendente' | 'solicitado' | 'recebido' | 'importado';
 type Aba = 'pendencias' | 'empresas' | 'help' | 'extratos';
 
 const STATUS_EXT_LABEL: Record<StatusExtrato, string> = {
@@ -256,6 +256,25 @@ function DashboardAnalista() {
     if (recebidos === bs.length) classe = 'completo';
     else if (recebidos > 0) classe = 'parcial';
     return { recebidos, total: bs.length, classe };
+  };
+
+  // Status agregado considerando o "pior" status entre todos os bancos
+  // pendente < solicitado < recebido < importado
+  const RANK_STATUS: Record<StatusExtrato, number> = {
+    pendente: 0,
+    solicitado: 1,
+    recebido: 2,
+    importado: 3,
+  };
+  const piorStatusEmpresa = (empresaId: string): StatusExtrato | null => {
+    const bs = bancosPorEmpresa[empresaId] || [];
+    if (bs.length === 0) return null;
+    let pior: StatusExtrato = 'importado';
+    for (const b of bs) {
+      const st = (extratoPorBanco[b.id]?.status || 'pendente') as StatusExtrato;
+      if (RANK_STATUS[st] < RANK_STATUS[pior]) pior = st;
+    }
+    return pior;
   };
 
   const statusBalancoDaEmpresa = (empresaId: string): StatusBalanco => {
@@ -1267,6 +1286,46 @@ function DashboardAnalista() {
                 </div>
               </div>
 
+              {/* Cards de stats — clicáveis para filtrar */}
+              {(() => {
+                const elegives = empresas.filter((e) => !e.nao_envia_extratos && e.status !== 'baixada');
+                const contagens = { pendente: 0, solicitado: 0, recebido: 0, importado: 0 };
+                for (const emp of elegives) {
+                  const pior = piorStatusEmpresa(emp.id);
+                  if (pior) contagens[pior]++;
+                }
+                const cards: { id: FiltroExtrato; label: string; valor: number; cor: string; corAtivo: string }[] = [
+                  { id: 'pendente', label: 'Pendentes', valor: contagens.pendente, cor: 'border-slate-300 hover:border-slate-400', corAtivo: 'border-slate-900 ring-1 ring-slate-900' },
+                  { id: 'solicitado', label: 'Solicitados', valor: contagens.solicitado, cor: 'border-amber-200 hover:border-amber-300', corAtivo: 'border-amber-500 ring-1 ring-amber-400 bg-amber-50' },
+                  { id: 'recebido', label: 'Recebidos (aguardando importação)', valor: contagens.recebido, cor: 'border-emerald-200 hover:border-emerald-300', corAtivo: 'border-emerald-500 ring-1 ring-emerald-400 bg-emerald-50' },
+                  { id: 'importado', label: 'Importados', valor: contagens.importado, cor: 'border-slate-800 hover:border-slate-900', corAtivo: 'border-slate-900 ring-1 ring-slate-900 bg-slate-900 text-white' },
+                ];
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    {cards.map((c) => {
+                      const ativo = extrFiltro === c.id;
+                      const isImportadoAtivo = c.id === 'importado' && ativo;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setExtrFiltro(ativo ? 'todos' : c.id)}
+                          className={`bg-white rounded-md p-3 text-left border transition ${
+                            ativo ? c.corAtivo : c.cor
+                          }`}
+                        >
+                          <p className={`text-[11px] font-semibold uppercase tracking-wider ${isImportadoAtivo ? 'text-slate-200' : 'text-slate-500'}`}>
+                            {c.label}
+                          </p>
+                          <p className={`mt-1 text-2xl font-semibold tabular-nums ${isImportadoAtivo ? 'text-white' : 'text-slate-900'}`}>
+                            {c.valor}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               {/* Filtros */}
               <div className="bg-white border border-slate-200 rounded-md shadow-sm">
                 <div className="p-4 border-b border-slate-200 grid grid-cols-1 md:grid-cols-[1fr_200px] gap-3">
@@ -1282,16 +1341,16 @@ function DashboardAnalista() {
                       className="w-full pl-10 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400"
                     />
                   </div>
-                  <select
-                    value={extrFiltro}
-                    onChange={(e) => setExtrFiltro(e.target.value as FiltroExtrato)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                  <button
+                    onClick={() => setExtrFiltro('todos')}
+                    className={`w-full px-3 py-2 text-sm border rounded-md transition ${
+                      extrFiltro === 'todos'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                    }`}
                   >
-                    <option value="todos">Todos os status</option>
-                    <option value="pendentes">Pendentes (0 recebidos)</option>
-                    <option value="parciais">Parciais (recebimento incompleto)</option>
-                    <option value="completos">Completos (todos recebidos)</option>
-                  </select>
+                    Ver todas
+                  </button>
                 </div>
 
                 {(() => {
@@ -1300,12 +1359,10 @@ function DashboardAnalista() {
                     if (emp.nao_envia_extratos) return false;
                     if (emp.status === 'baixada') return false;
                     if (termo && !emp.nome.toLowerCase().includes(termo)) return false;
-                    const s = statusGeralEmpresa(emp.id);
-                    if (s.classe === 'sem_bancos') return extrFiltro === 'todos';
-                    if (extrFiltro === 'pendentes' && s.recebidos !== 0) return false;
-                    if (extrFiltro === 'parciais' && s.classe !== 'parcial') return false;
-                    if (extrFiltro === 'completos' && s.classe !== 'completo') return false;
-                    return true;
+                    if (extrFiltro === 'todos') return true;
+                    const pior = piorStatusEmpresa(emp.id);
+                    if (!pior) return false;
+                    return pior === extrFiltro;
                   });
 
                   if (empresasFiltradasExt.length === 0) {
@@ -1350,7 +1407,9 @@ function DashboardAnalista() {
                                       const e = extratoPorBanco[b.id];
                                       const st = (e?.status || 'pendente') as StatusExtrato;
                                       const cor =
-                                        st === 'recebido' || st === 'importado'
+                                        st === 'importado'
+                                          ? 'bg-slate-900'
+                                          : st === 'recebido'
                                           ? 'bg-emerald-500'
                                           : st === 'solicitado'
                                           ? 'bg-amber-400'
@@ -1381,28 +1440,42 @@ function DashboardAnalista() {
                                   )}
                               </div>
 
-                              {/* Ação principal */}
+                              {/* Ação principal — minimalista */}
                               <div className="text-right">
                                 {bs.length === 0 ? (
                                   <Link
                                     href={`/empresa/${emp.id}/extratos`}
-                                    className="inline-block text-xs font-medium px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition w-full text-center"
+                                    className="inline-flex items-center justify-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded border border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-800 transition w-full"
                                   >
-                                    + Cadastrar banco
+                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Cadastrar
                                   </Link>
                                 ) : pendentes.length > 0 ? (
                                   <button
                                     onClick={() => handleCobrarTodosDaEmpresa(emp.id)}
-                                    className="text-xs font-medium px-3 py-1.5 rounded bg-slate-900 text-white hover:bg-slate-800 transition w-full"
+                                    className="inline-flex items-center justify-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition w-full"
                                     title="Registra cobrança em todos os bancos pendentes"
                                   >
-                                    + Cobrar ({pendentes.length})
+                                    Cobrar ({pendentes.length})
                                   </button>
-                                ) : (
-                                  <span className="inline-flex items-center justify-center px-3 py-1.5 text-[11px] font-medium rounded border bg-emerald-50 text-emerald-800 border-emerald-300 w-full">
-                                    ✓ Concluído
-                                  </span>
-                                )}
+                                ) : (() => {
+                                  const pior = piorStatusEmpresa(emp.id);
+                                  if (pior === 'importado') {
+                                    return (
+                                      <span className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium rounded bg-slate-900 text-white w-full">
+                                        ✓ Importado
+                                      </span>
+                                    );
+                                  }
+                                  // pior === 'recebido' (todos recebidos, falta importar)
+                                  return (
+                                    <span className="inline-flex items-center justify-center px-2.5 py-1 text-[11px] font-medium rounded border border-emerald-300 text-emerald-800 bg-emerald-50 w-full">
+                                      ✓ Recebido
+                                    </span>
+                                  );
+                                })()}
                               </div>
 
                               {/* Toggle expandir */}
