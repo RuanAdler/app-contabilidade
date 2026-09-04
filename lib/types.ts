@@ -19,6 +19,7 @@ export interface Empresa {
   marcado_em: string | null;
   status: StatusEmpresa;
   observacao_geral: string | null;
+  cnpj: string | null;
 }
 
 export interface BancoEmpresa {

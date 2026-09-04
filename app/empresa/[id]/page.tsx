@@ -565,7 +565,14 @@ export default function EmpresaDetail() {
                 </Link>
               </p>
             </div>
-
+            <a
+              href={`/relatorios/pendencia-empresa?empresa=${empresaId}&competencia=${competencia}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary-sm"
+            >
+              Relatório de pendências
+            </a>
           </div>
           {empresa.nao_envia_extratos && (
             <div className="mt-4 border border-amber-300 bg-amber-50 text-amber-900 rounded-md px-4 py-3 text-sm">
